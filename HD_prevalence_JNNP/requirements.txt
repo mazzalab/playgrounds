@@ -1,0 +1,7 @@
+numpy==1.14.3
+pandas==0.25.1
+matplotlib==2.2.3
+sklearn==0.20.3
+traitlets==4.3.2
+IPython==7.8.0
+ipywidgets==7.5.1
