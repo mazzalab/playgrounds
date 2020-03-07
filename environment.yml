@@ -22,4 +22,11 @@ dependencies:
   - scipy=1.4.1
   - traitlets=4.3.3
   - watermark=2.0.2
+  - jupyter_client=5.3.4
+  - jupyter_contrib_core=0.3.3
+  - jupyter_contrib_nbextensions=0.5.1
+  - jupyter_core=4.6.1
+  - jupyter_highlight_selected_word=0.2.0
+  - jupyter_latex_envs=1.4.4
+  - jupyter_nbextensions_configurator=0.4.1
 prefix: F:\Programs\miniconda3\envs\playgrounds
