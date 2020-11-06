@@ -1,0 +1,17 @@
+html {
+  font-size: 12px;
+}
+body {
+    font-family: sans-serif;
+    background-color: #f2f2f2;
+    font-size: small;
+}
+
+.header_text{
+    margin-top: 5px;
+    float: right
+}
+.header_logo{
+    margin-top: 15px;
+    float: left;
+}

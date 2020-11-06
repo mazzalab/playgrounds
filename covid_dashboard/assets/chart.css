@@ -1,0 +1,23 @@
+.chart{
+    width: 100%;
+    display: inline-block;
+    border-radius: 3px;
+    box-shadow: 3px 3px 3px grey;
+    background-color: #f9f9f9;
+    padding: 5px;
+    margin-bottom: 5px;
+    margin-left: 5px;
+    margin-top: 20px;
+}
+.option_label{
+    margin-left: 5px;
+    margin-top: 15px;
+}
+.option_component{
+    margin-top: 10px;
+    float: left;
+}
+.option_log_text{
+    font-size: 10px;
+    #margin-left: 5px;
+ }
