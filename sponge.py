@@ -4,6 +4,7 @@ import dash_html_components as html
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
+import random
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], assets_folder="covid_dashboard/assets")
 
@@ -20,7 +21,6 @@ df = pd.DataFrame({
     "City": ["SF", "SF", "SF", "Montreal", "Montreal", "Montreal"]
 })
 
-import random
 df_energy = pd.DataFrame({
     "Frame": [str(i) for i in range(0, 100)] + [str(i) for i in range(0, 100)],
     "Energy": [random.uniform(0, 20) for i in range(0, 100)] + [random.uniform(0, 20) for i in range(0, 100)],
