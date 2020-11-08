@@ -2,6 +2,7 @@ name: playgrounds
 channels:
   - bioconda
   - r
+  - conda-forge
   - defaults
 dependencies:
   - ipython

@@ -23,25 +23,27 @@ df = pd.DataFrame({
 
 df_energy = pd.DataFrame({
     "Frame": [str(i) for i in range(0, 100)] + [str(i) for i in range(0, 100)],
-    "Energy": [random.uniform(0, 20) for i in range(0, 100)] + [random.uniform(0, 20) for i in range(0, 100)],
-    "Replica": (100*["first"]) + (100*["second"])
+    "Energy": sorted([random.uniform(0, 20) for i in range(0, 100)]) + sorted(
+        [random.uniform(0, 25) for i in range(0, 100)]),
+    "Replica": (100 * ["first"]) + (100 * ["second"])
 })
 
-fig = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group", height=300)
-scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica", height=300)
+df_distance = pd.DataFrame({
+    "Frame": [str(i) for i in range(0, 100)] + [str(i) for i in range(0, 100)],
+    "Distance": sorted([random.uniform(0, 20) for i in range(0, 100)], reverse=True) + sorted(
+        [random.uniform(0, 25) for i in range(0, 100)], reverse=True),
+    "Replica": (100 * ["first"]) + (100 * ["second"])
+})
 
-fig.update_layout(
-    plot_bgcolor=colors['background'],
-    paper_bgcolor=colors['background'],
-    font_color=colors['text']
-)
+scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica")
+scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2, linecolor='black')
+scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2, linecolor='black',
+                            tickvals=list(range(0, 101, 10)))  # nticks=10,
 
-scatter_energy.update_layout(
-    plot_bgcolor=colors['background'],
-    paper_bgcolor=colors['background'],
-    font_color=colors['text']
-)
+fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
+fig2 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
 
+scatter_distance = px.scatter(df_distance, x="Frame", y="Distance", color="Replica")  # , height=300
 
 header_line = [
     dbc.Col(html.Img(
@@ -171,42 +173,163 @@ def update_frame_selection(value):
 
 
 energy_plot = dbc.Col(
-    [
-        dbc.Row(dbc.Col(
+    dbc.Row(
+        dbc.Col(
             dcc.Graph(
                 id='energy_scatter_plot',
                 figure=scatter_energy,
             )
-        ))
-    ], className="chart"
+        )
+    ), className="chart"
 )
 
-energy_plot2 = dbc.Col(
+fig1_plot = dbc.Col(
+    dbc.Row(
+        dbc.Col(
+            dcc.Graph(
+                id='fig1_plot',
+                figure=fig1,
+            )
+        )
+    ), className="chart"
+)
+
+fig2_plot = dbc.Col(
     [
         dbc.Row(dbc.Col(
             dcc.Graph(
-                id='example-graph-3',
-                figure=fig
+                id='fig2_plot',
+                figure=fig2
             )
         ))
     ], className="chart"
 )
 
-first_line_layout = dbc.Row(
+distance_plot = dbc.Col(
+    [
+        dbc.Row(dbc.Col(
+            dcc.Graph(
+                id='distance_plot',
+                figure=scatter_distance
+            ),
+        ))
+    ], className="chart"
+)
+
+plot_layout = dbc.Container(
+    [
+        dbc.Row(
+            [
+                dbc.Col(energy_plot, width=6),
+                dbc.Col(fig1_plot, width=6)
+            ],
+        ),
+        dbc.Row(
+            [
+                dbc.Col(fig2_plot, width=8),
+                dbc.Col(distance_plot, width=4),
+            ],
+        )
+    ],
+    fluid=True,
+)
+
+main_layout = dbc.Row(
     [
         dbc.Col(option_box, width=3),
-        dbc.Col(energy_plot, width=4),
-        dbc.Col(energy_plot2, width=5)
-    ]
+        dbc.Col(plot_layout, width=9)
+    ], no_gutters=True
 )
 
 app.layout = dbc.Container(
     [
+        html.Div(id='size', style={"display": "none"}),
+        dcc.Location(id='url'),
+
         dbc.Row(header_line),
-        first_line_layout
+        main_layout
     ],
-    # fluid=True,
+    fluid=True
 )
+
+app.clientside_callback(
+    """
+    function(value){
+        return window.innerHeight;
+    }
+    """,
+    dash.dependencies.Output('size', 'children'),
+    [dash.dependencies.Input('url', 'href')]
+)
+
+
+@app.callback(
+    [dash.dependencies.Output('energy_scatter_plot', 'figure'),
+     dash.dependencies.Output('fig1_plot', 'figure'),
+     dash.dependencies.Output('fig2_plot', 'figure'),
+     dash.dependencies.Output('distance_plot', 'figure')],
+    [dash.dependencies.Input('size', 'children')])
+def update_plot_height(value):
+    scatter_energy.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text'],
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        ),
+        margin=dict(l=20, r=10, t=20, b=20),
+        height=300
+    )
+
+    fig1.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text'],
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        margin=dict(l=20, r=20, t=20, b=20),
+        height=300
+    )
+
+    fig2.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text'],
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        margin=dict(l=20, r=20, t=20, b=20),
+        height=value - 300 - 150
+    )
+
+    scatter_distance.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text'],
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        ),
+        margin=dict(l=20, r=10, t=20, b=20),
+        height=value - 300 - 150
+    )
+
+    return scatter_energy, fig1, fig2, scatter_distance
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
