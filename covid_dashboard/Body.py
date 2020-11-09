@@ -5,7 +5,6 @@ import dash_core_components as dcc
 import dash_html_components as html
 from . import app
 
-
 colors = {
     'background': '#FFFFFF',
     'text': '#000000'
@@ -14,12 +13,14 @@ colors = {
 
 class Body:
     def __init__(self, df_energy, df, df_distance):
+        self.tot_frames = int(df_energy.Energy.size / df_energy.Replica.unique().size)
+
         self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica")
         self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
                                          linecolor='black')
         self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
                                          linecolor='black',
-                                         tickvals=list(range(0, 101, 10)))  # nticks=10,
+                                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
 
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
         self.fig2 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
@@ -35,6 +36,21 @@ class Body:
             dash.dependencies.Output('size', 'children'),
             [dash.dependencies.Input('url', 'href')]
         )
+
+        app.callback([dash.dependencies.Output('energy_scatter_plot', 'figure'),
+                      dash.dependencies.Output('fig1_plot', 'figure'),
+                      dash.dependencies.Output('fig2_plot', 'figure'),
+                      # dash.dependencies.Output('distance_plot', 'figure')
+                      ],
+                     [dash.dependencies.Input('size', 'children')])(self.update_plot_height)
+
+        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
+                      dash.dependencies.Output('simtime-slider', 'value'),
+                      dash.dependencies.Output('simtime-slider', 'marks')],
+                     [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
+
+        app.callback(dash.dependencies.Output('distance_plot', 'figure'),
+                     [dash.dependencies.Input('simtime-slider', 'value')])(self.on_move_slider)
 
     @staticmethod
     def __make_option_box() -> dbc.Col:
@@ -88,10 +104,10 @@ class Body:
                                 dcc.RangeSlider(
                                     id='simtime-slider',
                                     min=0,
-                                    max=1300,
+                                    max=10,
                                     # step=None,
                                     marks={i: str(i) for i in range(0, 1301, 300)},
-                                    value=[0, 1300]
+                                    value=[0, 10]
                                 )
                             )
                         ),
@@ -146,12 +162,87 @@ class Body:
 
         return option_box
 
+    # ##### CALLBACKS ######
     @staticmethod
     @app.callback(
         dash.dependencies.Output('output-container-simtime-slider', 'children'),
         [dash.dependencies.Input('simtime-slider', 'value')])
     def update_frame_selection(value):
         return f'Selected frames: {value[0]}-{value[1]}'
+
+    def on_move_slider(self, value):
+        # self.scatter_energy.update_xaxes()
+
+        self.scatter_distance.update_layout(
+            xaxis=[value[0], value[1]]
+        )
+        return self.scatter_energy
+
+    def set_frame_extreme_positions(self, value):
+        return self.tot_frames, [0, self.tot_frames], {i: str(i) for i in range(0, self.tot_frames, 300)}
+
+    def update_plot_height(self, value):
+        self.scatter_energy.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text'],
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=0.01
+            ),
+            margin=dict(l=20, r=10, t=20, b=20),
+            height=300
+        )
+
+        self.fig1.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text'],
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            margin=dict(l=20, r=20, t=20, b=20),
+            height=300
+        )
+
+        self.fig2.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text'],
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            margin=dict(l=20, r=20, t=20, b=20),
+            height=value - 300 - 150
+        )
+
+        self.scatter_distance.update_layout(
+            plot_bgcolor=colors['background'],
+            paper_bgcolor=colors['background'],
+            font_color=colors['text'],
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="left",
+                x=0.01
+            ),
+            margin=dict(l=20, r=10, t=20, b=20),
+            height=value - 300 - 150
+        )
+
+        return self.scatter_energy, self.fig1, self.fig2, self.scatter_distance
+
+    # #######################
 
     def __make_energy_plot(self):
         energy_plot = dbc.Col(
@@ -233,71 +324,3 @@ class Body:
             ], no_gutters=True
         )
         return main_layout
-
-    @staticmethod
-    @app.callback(
-        [dash.dependencies.Output('energy_scatter_plot', 'figure'),
-         dash.dependencies.Output('fig1_plot', 'figure'),
-         dash.dependencies.Output('fig2_plot', 'figure'),
-         dash.dependencies.Output('distance_plot', 'figure')],
-        [dash.dependencies.Input('size', 'children')])
-    def update_plot_height(value):
-        scatter_energy.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            ),
-            margin=dict(l=20, r=10, t=20, b=20),
-            height=300
-        )
-
-        self.fig1.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=300
-        )
-
-        self.fig2.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=value - 300 - 150
-        )
-
-        self.scatter_distance.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            ),
-            margin=dict(l=20, r=10, t=20, b=20),
-            height=value - 300 - 150
-        )
-
-        return self.scatter_energy, self.fig1, self.fig2, self.scatter_distance

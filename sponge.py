@@ -19,17 +19,17 @@ df = pd.DataFrame({
 })
 
 df_energy = pd.DataFrame({
-    "Frame": [str(i) for i in range(0, 100)] + [str(i) for i in range(0, 100)],
-    "Energy": sorted([random.uniform(0, 20) for i in range(0, 100)]) + sorted(
-        [random.uniform(0, 25) for i in range(0, 100)]),
-    "Replica": (100 * ["first"]) + (100 * ["second"])
+    "Frame": [str(i) for i in range(0, 600)] + [str(i) for i in range(0, 600)],
+    "Energy": sorted([random.uniform(0, 20) for i in range(0, 600)]) + sorted(
+        [random.uniform(0, 25) for i in range(0, 600)]),
+    "Replica": (600 * ["first"]) + (600 * ["second"])
 })
 
 df_distance = pd.DataFrame({
-    "Frame": [str(i) for i in range(0, 100)] + [str(i) for i in range(0, 100)],
-    "Distance": sorted([random.uniform(0, 20) for i in range(0, 100)], reverse=True) + sorted(
-        [random.uniform(0, 25) for i in range(0, 100)], reverse=True),
-    "Replica": (100 * ["first"]) + (100 * ["second"])
+    "Frame": [str(i) for i in range(0, 600)] + [str(i) for i in range(0, 600)],
+    "Distance": sorted([random.uniform(0, 20) for i in range(0, 600)], reverse=True) + sorted(
+        [random.uniform(0, 25) for i in range(0, 600)], reverse=True),
+    "Replica": (600 * ["first"]) + (600 * ["second"])
 })
 
 
