@@ -1,8 +1,11 @@
 import dash
 import plotly.express as px
+import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import dash_html_components as html
+from dash.exceptions import PreventUpdate
+
 from . import app
 
 colors = {
@@ -23,7 +26,49 @@ class Body:
                                          tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
 
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
-        self.fig2 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
+
+        size_stylesheet = [
+            # Group selectors
+            {
+                'selector': 'node',
+                'style': {
+                    'content': 'data(label)',
+                    'font-size': '7px'
+                }
+            },
+            {
+                'selector': 'edge',
+                'style': {
+                    'width': 2
+                }
+            },
+            {
+                'selector': '.small',
+                'style': {
+                    'width': 10,
+                    'height': 10,
+                }
+            }
+        ]
+        self.fig_network = cyto.Cytoscape(
+            id='fig_network',
+            layout={'name': 'cose'},
+            style={'width': '100%', 'height': '400px'},
+            stylesheet=size_stylesheet,
+            elements=[
+                {'data': {'id': 'one', 'label': 'Node 1'}, 'position': {'x': 75, 'y': 75}, 'classes': 'small'},
+                {'data': {'id': 'two', 'label': 'Node 2'}, 'position': {'x': 200, 'y': 200}, 'classes': 'small'},
+                {'data': {'id': 'three', 'label': 'Node 3'}, 'position': {'x': 250, 'y': 250}, 'classes': 'small'},
+                {'data': {'id': 'for', 'label': 'Node 4'}, 'position': {'x': 300, 'y': 300}, 'classes': 'small'},
+                {'data': {'id': 'five', 'label': 'Node 5'}, 'position': {'x': 100, 'y': 100}, 'classes': 'small'},
+                {'data': {'source': 'one', 'target': 'two'}},
+                {'data': {'source': 'one', 'target': 'three'}},
+                {'data': {'source': 'one', 'target': 'for'}},
+                {'data': {'source': 'two', 'target': 'for'}},
+                {'data': {'source': 'five', 'target': 'three'}},
+                {'data': {'source': 'five', 'target': 'for'}}
+            ]
+        )
 
         self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance", color="Replica")  # , height=300
 
@@ -39,18 +84,16 @@ class Body:
 
         app.callback([dash.dependencies.Output('energy_scatter_plot', 'figure'),
                       dash.dependencies.Output('fig1_plot', 'figure'),
-                      dash.dependencies.Output('fig2_plot', 'figure'),
-                      # dash.dependencies.Output('distance_plot', 'figure')
-                      ],
-                     [dash.dependencies.Input('size', 'children')])(self.update_plot_height)
+                      dash.dependencies.Output('fig_network', 'style'),
+                      dash.dependencies.Output('distance_plot', 'figure')],
+                     [dash.dependencies.Input('size', 'children'),
+                      dash.dependencies.Input('simtime-slider', 'value')],
+                     )(self.update_plot)
 
         app.callback([dash.dependencies.Output('simtime-slider', 'max'),
                       dash.dependencies.Output('simtime-slider', 'value'),
                       dash.dependencies.Output('simtime-slider', 'marks')],
                      [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
-
-        app.callback(dash.dependencies.Output('distance_plot', 'figure'),
-                     [dash.dependencies.Input('simtime-slider', 'value')])(self.on_move_slider)
 
     @staticmethod
     def __make_option_box() -> dbc.Col:
@@ -170,77 +213,71 @@ class Body:
     def update_frame_selection(value):
         return f'Selected frames: {value[0]}-{value[1]}'
 
-    def on_move_slider(self, value):
-        # self.scatter_energy.update_xaxes()
+    def update_plot(self, inner_window_height: int, slider_extreme_values: list):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+        else:
+            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-        self.scatter_distance.update_layout(
-            xaxis=[value[0], value[1]]
-        )
-        return self.scatter_energy
+        network_style = {}
+        if button_id == "size":
+            self.scatter_energy.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=0.01
+                ),
+                margin=dict(l=20, r=10, t=20, b=20),
+                height=300
+            )
+
+            self.fig1.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                margin=dict(l=20, r=20, t=20, b=20),
+                height=300
+            )
+
+            network_style = {'height': inner_window_height - 300 - 150, 'background-color': colors['background']}
+
+            self.scatter_distance.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=0.01
+                ),
+                margin=dict(l=20, r=10, t=20, b=20),
+                height=inner_window_height - 300 - 150
+            )
+        else:
+            self.scatter_distance.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
+            self.scatter_energy.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
+
+        return self.scatter_energy, self.fig1, network_style, self.scatter_distance
 
     def set_frame_extreme_positions(self, value):
-        return self.tot_frames, [0, self.tot_frames], {i: str(i) for i in range(0, self.tot_frames, 300)}
-
-    def update_plot_height(self, value):
-        self.scatter_energy.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            ),
-            margin=dict(l=20, r=10, t=20, b=20),
-            height=300
-        )
-
-        self.fig1.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=300
-        )
-
-        self.fig2.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=value - 300 - 150
-        )
-
-        self.scatter_distance.update_layout(
-            plot_bgcolor=colors['background'],
-            paper_bgcolor=colors['background'],
-            font_color=colors['text'],
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
-            ),
-            margin=dict(l=20, r=10, t=20, b=20),
-            height=value - 300 - 150
-        )
-
-        return self.scatter_energy, self.fig1, self.fig2, self.scatter_distance
+        return self.tot_frames, [0, self.tot_frames], {i: str(i) for i in range(0, self.tot_frames + 1, 300)}
 
     # #######################
 
@@ -270,18 +307,15 @@ class Body:
         )
         return fig1_plot
 
-    def __make_fig2_plot(self):
-        fig2_plot = dbc.Col(
+    def __make_fig_network(self):
+        fig_network = dbc.Col(
             [
                 dbc.Row(dbc.Col(
-                    dcc.Graph(
-                        id='fig2_plot',
-                        figure=self.fig2
-                    )
+                    self.fig_network
                 ))
             ], className="chart"
         )
-        return fig2_plot
+        return fig_network
 
     def __make_distance_plot(self):
         distance_plot = dbc.Col(
@@ -307,7 +341,7 @@ class Body:
                 ),
                 dbc.Row(
                     [
-                        dbc.Col(self.__make_fig2_plot(), width=8),
+                        dbc.Col(self.__make_fig_network(), width=8),
                         dbc.Col(self.__make_distance_plot(), width=4),
                     ],
                 )
