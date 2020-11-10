@@ -18,12 +18,26 @@ class Body:
     def __init__(self, df_energy, df, df_distance):
         self.tot_frames = int(df_energy.Energy.size / df_energy.Replica.unique().size)
 
-        self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica")
-        self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                                         linecolor='black')
-        self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                                         linecolor='black',
-                                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
+        import plotly.graph_objects as go
+        self.scatter_energy = go.Figure()
+        self.scatter_energy.add_trace(go.Scatter(x=df_energy.Frame, y=df_energy.Energy,
+                                 mode='markers',
+                                 name='markers'))
+
+        # self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica", opacity=0.2,
+        #                                  color_discrete_sequence=px.colors.qualitative.D3[0:2])
+        # self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+        #                                  linecolor='black')
+        # self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+        #                                  linecolor='black',
+        #                                  tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
+        # self.scatter_energy.update_traces(marker=dict(size=6,
+        #                                               opacity=0.2,
+        #                                               # color=px.colors.qualitative.Plotly[0]
+        #                                               # line=dict(width=2,
+        #                                               #           color='DarkSlateGrey')
+        #                                               ),
+        #                                   selector=dict(mode='markers'))
 
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
 
@@ -99,7 +113,7 @@ class Body:
     def __make_option_box() -> dbc.Col:
         option_box = dbc.Col(
             [
-                dbc.Container(
+                html.Div(dbc.Container(
                     [
                         dbc.Row([
                             dbc.Col(
@@ -129,7 +143,7 @@ class Body:
                             )], no_gutters=True
                         )
                     ]
-                ),
+                ), className='divBorder'),
 
                 dbc.Row(
                     html.Hr(className="rounded")
@@ -233,7 +247,8 @@ class Body:
                     x=0.01
                 ),
                 margin=dict(l=20, r=10, t=20, b=20),
-                height=300
+                height=300,
+
             )
 
             self.fig1.update_layout(

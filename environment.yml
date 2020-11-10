@@ -21,5 +21,7 @@ dependencies:
   - openpyxl
   - dash-bootstrap-components
   - dash
+  - statsmodels
+  - dash_cytoscape
 prefix: F:\Programs\miniconda3\envs\playgrounds
 
