@@ -18,11 +18,22 @@ class Body:
     def __init__(self, df_energy, df, df_distance):
         self.tot_frames = int(df_energy.Energy.size / df_energy.Replica.unique().size)
 
+        # https://plotly.com/python/ml-regression/
         import plotly.graph_objects as go
+        from sklearn.neighbors import KNeighborsRegressor
+
+        knn_uni = KNeighborsRegressor(10, weights='uniform')
+        knn_uni.fit(df.Frame, df.Energy)
+        y_uni = knn_uni.predict(x_range.reshape(-1, 1))
+
         self.scatter_energy = go.Figure()
         self.scatter_energy.add_trace(go.Scatter(x=df_energy.Frame, y=df_energy.Energy,
                                  mode='markers',
                                  name='markers'))
+
+        fig.add_traces(go.Scatter(x=x_range, y=y_uni, name='Weights: Uniform'))
+
+
 
         # self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica", opacity=0.2,
         #                                  color_discrete_sequence=px.colors.qualitative.D3[0:2])
