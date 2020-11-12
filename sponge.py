@@ -3,10 +3,10 @@ import dash_html_components as html
 import dash_bootstrap_components as dbc
 
 import pandas as pd
-import random
 
 from covid_dashboard import app
 from covid_dashboard.Body import Body
+from covid_dashboard.db import DBManager
 from covid_dashboard.header_footer import HeaderFooter
 
 
@@ -18,27 +18,17 @@ df = pd.DataFrame({
     "City": ["SF", "SF", "SF", "Montreal", "Montreal", "Montreal"]
 })
 
-df_energy = pd.DataFrame({
-    "Frame": [str(i) for i in range(0, 600)] + [str(i) for i in range(0, 600)],
-    "Energy": sorted([random.uniform(0, 20) for i in range(0, 600)]) + sorted(
-        [random.uniform(0, 25) for i in range(0, 600)]),
-    "Replica": (600 * ["first"]) + (600 * ["second"])
-})
-
-df_distance = pd.DataFrame({
-    "Frame": [str(i) for i in range(0, 600)] + [str(i) for i in range(0, 600)],
-    "Distance": sorted([random.uniform(0, 20) for i in range(0, 600)], reverse=True) + sorted(
-        [random.uniform(0, 25) for i in range(0, 600)], reverse=True),
-    "Replica": (600 * ["first"]) + (600 * ["second"])
-})
-
 
 def main():
     logo_url = app.get_asset_url("logocss.png")
-
     header_line = HeaderFooter.get_header(logo_url)
-    body = Body(df_energy, df, df_distance)
 
+    db_manager = DBManager()
+    db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
+    df_energy = db_manager.get_energy_values(system="WT", replica=1)
+    df_distance = db_manager.get_distance_values(system="WT", replica=1)
+
+    body = Body(df_energy, df, df_distance)
     app.layout = dbc.Container(
         [
             html.Div(id='size', style={"display": "none"}),

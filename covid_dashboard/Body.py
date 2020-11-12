@@ -1,10 +1,12 @@
-import dash
 import plotly.express as px
+import plotly.graph_objects as go
+import dash
 import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.exceptions import PreventUpdate
+from sklearn.neighbors import KNeighborsRegressor
 
 from . import app
 
@@ -16,42 +18,9 @@ colors = {
 
 class Body:
     def __init__(self, df_energy, df, df_distance):
-        self.tot_frames = int(df_energy.Energy.size / df_energy.Replica.unique().size)
+        self.frame_per_simulation = int(df_energy.Energy.size / df_energy.Replica.unique().size)
 
-        # https://plotly.com/python/ml-regression/
-        import plotly.graph_objects as go
-        from sklearn.neighbors import KNeighborsRegressor
-
-        knn_uni = KNeighborsRegressor(10, weights='uniform')
-
-        X = df_energy.Frame.values.reshape(-1, 1)
-        knn_uni.fit(X, df_energy.Energy)
-        y_uni = knn_uni.predict(X)
-
-        # self.scatter_energy = go.Figure()
-        # self.scatter_energy.add_trace(go.Scatter(x=df_energy.Frame, y=df_energy.Energy,
-        #                          mode='markers',
-        #                          name='markers'))
-
-        self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color='Replica', opacity=0.65)
-        self.scatter_energy.add_traces(go.Scatter(x=X, y=y_uni, name='Weights: Uniform'))
-
-
-
-        # self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color="Replica", opacity=0.2,
-        #                                  color_discrete_sequence=px.colors.qualitative.D3[0:2])
-        # self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-        #                                  linecolor='black')
-        # self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-        #                                  linecolor='black',
-        #                                  tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
-        # self.scatter_energy.update_traces(marker=dict(size=6,
-        #                                               opacity=0.2,
-        #                                               # color=px.colors.qualitative.Plotly[0]
-        #                                               # line=dict(width=2,
-        #                                               #           color='DarkSlateGrey')
-        #                                               ),
-        #                                   selector=dict(mode='markers'))
+        self.scatter_energy = self.create_energy_plot(df_energy)
 
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
 
@@ -122,6 +91,84 @@ class Body:
                       dash.dependencies.Output('simtime-slider', 'value'),
                       dash.dependencies.Output('simtime-slider', 'marks')],
                      [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
+
+    # ##### CALLBACKS ######
+    @staticmethod
+    @app.callback(
+        dash.dependencies.Output('output-container-simtime-slider', 'children'),
+        [dash.dependencies.Input('simtime-slider', 'value')])
+    def update_frame_selection(value):
+        return f'Selected frames: {value[0]}-{value[1]}'
+
+    def update_plot(self, inner_window_height: int, slider_extreme_values: list):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+        else:
+            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        network_style = {}
+        if button_id == "size":
+            self.scatter_energy.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=0.01
+                ),
+                margin=dict(l=20, r=10, t=20, b=20),
+                height=300,
+
+            )
+
+            self.fig1.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                margin=dict(l=20, r=20, t=20, b=20),
+                height=300
+            )
+
+            network_style = {'height': inner_window_height - 300 - 150, 'background-color': colors['background']}
+
+            self.scatter_distance.update_layout(
+                plot_bgcolor=colors['background'],
+                paper_bgcolor=colors['background'],
+                font_color=colors['text'],
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=0.01
+                ),
+                margin=dict(l=20, r=10, t=20, b=20),
+                height=inner_window_height - 300 - 150
+            )
+        else:
+            self.scatter_distance.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
+            self.scatter_energy.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
+
+        return self.scatter_energy, self.fig1, network_style, self.scatter_distance
+
+    def set_frame_extreme_positions(self, value):
+        return self.frame_per_simulation, [0, self.frame_per_simulation], {i: str(i) for i in
+                                                                           range(0, self.frame_per_simulation + 1, 300)}
+
+    # #######################
 
     @staticmethod
     def __make_option_box() -> dbc.Col:
@@ -233,83 +280,6 @@ class Body:
 
         return option_box
 
-    # ##### CALLBACKS ######
-    @staticmethod
-    @app.callback(
-        dash.dependencies.Output('output-container-simtime-slider', 'children'),
-        [dash.dependencies.Input('simtime-slider', 'value')])
-    def update_frame_selection(value):
-        return f'Selected frames: {value[0]}-{value[1]}'
-
-    def update_plot(self, inner_window_height: int, slider_extreme_values: list):
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            raise PreventUpdate
-        else:
-            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-        network_style = {}
-        if button_id == "size":
-            self.scatter_energy.update_layout(
-                plot_bgcolor=colors['background'],
-                paper_bgcolor=colors['background'],
-                font_color=colors['text'],
-                legend=dict(
-                    yanchor="top",
-                    y=0.99,
-                    xanchor="left",
-                    x=0.01
-                ),
-                margin=dict(l=20, r=10, t=20, b=20),
-                height=300,
-
-            )
-
-            self.fig1.update_layout(
-                plot_bgcolor=colors['background'],
-                paper_bgcolor=colors['background'],
-                font_color=colors['text'],
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                ),
-                margin=dict(l=20, r=20, t=20, b=20),
-                height=300
-            )
-
-            network_style = {'height': inner_window_height - 300 - 150, 'background-color': colors['background']}
-
-            self.scatter_distance.update_layout(
-                plot_bgcolor=colors['background'],
-                paper_bgcolor=colors['background'],
-                font_color=colors['text'],
-                legend=dict(
-                    yanchor="top",
-                    y=0.99,
-                    xanchor="left",
-                    x=0.01
-                ),
-                margin=dict(l=20, r=10, t=20, b=20),
-                height=inner_window_height - 300 - 150
-            )
-        else:
-            self.scatter_distance.update_layout(
-                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
-            )
-            self.scatter_energy.update_layout(
-                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
-            )
-
-        return self.scatter_energy, self.fig1, network_style, self.scatter_distance
-
-    def set_frame_extreme_positions(self, value):
-        return self.tot_frames, [0, self.tot_frames], {i: str(i) for i in range(0, self.tot_frames + 1, 300)}
-
-    # #######################
-
     def __make_energy_plot(self):
         energy_plot = dbc.Col(
             dbc.Row(
@@ -387,3 +357,31 @@ class Body:
             ], no_gutters=True
         )
         return main_layout
+
+    def create_energy_plot(self, df_energy) -> go.Figure:
+        replica_name: list = df_energy.Replica.unique()
+        num_replicas: int = replica_name.size
+
+        fig = px.scatter(df_energy, x="Frame", y="Energy", color="Replica",
+                         color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
+        fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                         linecolor='black')
+        fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                         linecolor='black',
+                         tickvals=list(range(0, self.frame_per_simulation + 1, 50)))  # nticks=10,
+        fig.update_traces(marker=dict(size=5,
+                                      opacity=0.2,
+                                      # color=px.colors.qualitative.Plotly[0]
+                                      # line=dict(width=2,
+                                      #           color='DarkSlateGrey')
+                                      ),
+                          selector=dict(mode='markers'))
+
+        knn_uni = KNeighborsRegressor(10, weights='uniform')
+        x = df_energy.Frame.values[0:self.frame_per_simulation]
+        for i in range(0, num_replicas):
+            knn_uni.fit(x.reshape(-1, 1), df_energy.Energy[i*self.frame_per_simulation:(self.frame_per_simulation*(i+1))])
+            y_uni = knn_uni.predict(x.reshape(-1, 1))
+            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=i, line=dict(color=px.colors.qualitative.D3[i])))
+
+        return fig
