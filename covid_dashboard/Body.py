@@ -23,15 +23,18 @@ class Body:
         from sklearn.neighbors import KNeighborsRegressor
 
         knn_uni = KNeighborsRegressor(10, weights='uniform')
-        knn_uni.fit(df.Frame, df.Energy)
-        y_uni = knn_uni.predict(x_range.reshape(-1, 1))
 
-        self.scatter_energy = go.Figure()
-        self.scatter_energy.add_trace(go.Scatter(x=df_energy.Frame, y=df_energy.Energy,
-                                 mode='markers',
-                                 name='markers'))
+        X = df_energy.Frame.values.reshape(-1, 1)
+        knn_uni.fit(X, df_energy.Energy)
+        y_uni = knn_uni.predict(X)
 
-        fig.add_traces(go.Scatter(x=x_range, y=y_uni, name='Weights: Uniform'))
+        # self.scatter_energy = go.Figure()
+        # self.scatter_energy.add_trace(go.Scatter(x=df_energy.Frame, y=df_energy.Energy,
+        #                          mode='markers',
+        #                          name='markers'))
+
+        self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy", color='Replica', opacity=0.65)
+        self.scatter_energy.add_traces(go.Scatter(x=X, y=y_uni, name='Weights: Uniform'))
 
 
 
