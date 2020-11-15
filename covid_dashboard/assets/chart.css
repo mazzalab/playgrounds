@@ -6,8 +6,7 @@
     box-shadow: 3px 3px 3px grey;
     background-color: #f9f9f9;
     padding: 5px;
-    #margin-bottom: 5px;
-    margin-left: 5px;
+    margin-left: 3px;
     margin-top: 20px;
 }
 .option_label{
@@ -22,3 +21,11 @@
     font-size: 11px;
     #margin-left: 5px;
  }
+.network_label{
+    margin-left: 0px;
+    margin-top: 5px;
+    margin-right: 2px;
+    font-size: 10px;
+    color: #5f9ea0;
+    background-color: #ffffff;
+}

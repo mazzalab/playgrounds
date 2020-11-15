@@ -1,14 +1,15 @@
+from . import app
+
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.neighbors import KNeighborsRegressor
+
 import dash
 import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.exceptions import PreventUpdate
-from sklearn.neighbors import KNeighborsRegressor
-
-from . import app
 
 colors = {
     'background': '#FFFFFF',
@@ -17,57 +18,19 @@ colors = {
 
 
 class Body:
-    def __init__(self, df_energy, df, df_distance):
+    def __init__(self, network_elements: list, df_energy, df, df_distance, df_contacts):
         self.frame_per_simulation = int(df_energy.Energy.size / df_energy.Replica.unique().size)
 
-        self.scatter_energy = self.create_energy_plot(df_energy)
+        self.all_contacts = df_contacts
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts, ["all"])
 
-        self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")  #
+        self.network = self.__create_network_plot(network_elements)
+        self.scatter_energy = self.__create_energy_plot(df_energy)
+        self.scatter_distance = self.__create_distance_plot(df_distance)
 
-        size_stylesheet = [
-            # Group selectors
-            {
-                'selector': 'node',
-                'style': {
-                    'content': 'data(label)',
-                    'font-size': '7px'
-                }
-            },
-            {
-                'selector': 'edge',
-                'style': {
-                    'width': 2
-                }
-            },
-            {
-                'selector': '.small',
-                'style': {
-                    'width': 10,
-                    'height': 10,
-                }
-            }
-        ]
-        self.fig_network = cyto.Cytoscape(
-            id='fig_network',
-            layout={'name': 'cose'},
-            style={'width': '100%', 'height': '400px'},
-            stylesheet=size_stylesheet,
-            elements=[
-                {'data': {'id': 'one', 'label': 'Node 1'}, 'position': {'x': 75, 'y': 75}, 'classes': 'small'},
-                {'data': {'id': 'two', 'label': 'Node 2'}, 'position': {'x': 200, 'y': 200}, 'classes': 'small'},
-                {'data': {'id': 'three', 'label': 'Node 3'}, 'position': {'x': 250, 'y': 250}, 'classes': 'small'},
-                {'data': {'id': 'for', 'label': 'Node 4'}, 'position': {'x': 300, 'y': 300}, 'classes': 'small'},
-                {'data': {'id': 'five', 'label': 'Node 5'}, 'position': {'x': 100, 'y': 100}, 'classes': 'small'},
-                {'data': {'source': 'one', 'target': 'two'}},
-                {'data': {'source': 'one', 'target': 'three'}},
-                {'data': {'source': 'one', 'target': 'for'}},
-                {'data': {'source': 'two', 'target': 'for'}},
-                {'data': {'source': 'five', 'target': 'three'}},
-                {'data': {'source': 'five', 'target': 'for'}}
-            ]
-        )
-
-        self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance", color="Replica")  # , height=300
+        self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
+        #  self.fig1 = px.bar(df_distance, x="Replica", y="Distance", color="Replica",
+        #                     animation_frame="Frame", animation_group="Replica", range_y=[0, 30])
 
         app.clientside_callback(
             """
@@ -92,7 +55,20 @@ class Body:
                       dash.dependencies.Output('simtime-slider', 'marks')],
                      [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
 
-    # ##### CALLBACKS ######
+        app.callback(
+            dash.dependencies.Output('bond_dropdown', 'options'),
+            [dash.dependencies.Input('bond_checklist', 'value')])(self.__select_contacts)
+
+    def build_layout(self):
+        main_layout = dbc.Row(
+            [
+                dbc.Col(self.__make_option_box(), width=2),
+                dbc.Col(self.__all_plot_layout(), width=10)
+            ], no_gutters=True
+        )
+        return main_layout
+
+    # region CALLBACKS
     @staticmethod
     @app.callback(
         dash.dependencies.Output('output-container-simtime-slider', 'children'),
@@ -109,6 +85,8 @@ class Body:
 
         network_style = {}
         if button_id == "size":
+            network_style = {'height': f'{inner_window_height - 120}px', 'background-color': colors['background']}
+
             self.scatter_energy.update_layout(
                 plot_bgcolor=colors['background'],
                 paper_bgcolor=colors['background'],
@@ -120,8 +98,7 @@ class Body:
                     x=0.01
                 ),
                 margin=dict(l=20, r=10, t=20, b=20),
-                height=300,
-
+                height=inner_window_height / 2 - 65,
             )
 
             self.fig1.update_layout(
@@ -136,10 +113,8 @@ class Body:
                     x=1
                 ),
                 margin=dict(l=20, r=20, t=20, b=20),
-                height=300
+                height=inner_window_height / 2 - 65
             )
-
-            network_style = {'height': inner_window_height - 300 - 150, 'background-color': colors['background']}
 
             self.scatter_distance.update_layout(
                 plot_bgcolor=colors['background'],
@@ -152,7 +127,7 @@ class Body:
                     x=0.01
                 ),
                 margin=dict(l=20, r=10, t=20, b=20),
-                height=inner_window_height - 300 - 150
+                height=inner_window_height / 2 - 65
             )
         else:
             self.scatter_distance.update_layout(
@@ -168,10 +143,36 @@ class Body:
         return self.frame_per_simulation, [0, self.frame_per_simulation], {i: str(i) for i in
                                                                            range(0, self.frame_per_simulation + 1, 300)}
 
-    # #######################
+    # endregion
 
-    @staticmethod
-    def __make_option_box() -> dbc.Col:
+    # region PRIVATE METHODS
+    def __format_contact_4_dropdown(self, df_contacts, bond_types: list) -> list:
+        all_contacts_set = set()
+        all_contacts = []
+        for index, row in df_contacts.iterrows():
+            temp_contact: tuple = row.Contact
+            temp_contact: tuple = tuple(sorted(temp_contact))
+
+            if "all" not in bond_types and row.Contact_type not in bond_types:
+                continue
+            else:
+                if (temp_contact[1], temp_contact[0]) in all_contacts_set or temp_contact in all_contacts_set or (
+                        "all" not in bond_types and row.Contact_type not in bond_types):
+                    continue
+                else:
+                    all_contacts_set.add(temp_contact)
+                    temp_dict = dict()
+                    temp_dict['label'] = temp_contact[0] + "-" + temp_contact[1]
+                    temp_dict['value'] = temp_dict['label']
+                    all_contacts.append(temp_dict)
+
+        return all_contacts
+
+    def __select_contacts(self, bonds: list):
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.all_contacts, bonds)
+        return self.contact_dropdown_values
+
+    def __make_option_box(self) -> dbc.Col:
         option_box = dbc.Col(
             [
                 html.Div(dbc.Container(
@@ -255,7 +256,7 @@ class Body:
                                         {'label': 'all', 'value': 'all'},
                                     ],
                                     value=['all'],
-                                    id="checklist-input",
+                                    id="bond_checklist",
                                     inline=True,
                                 ),
                             ]
@@ -263,13 +264,10 @@ class Body:
                         dbc.Row(
                             dbc.Col(
                                 dcc.Dropdown(
-                                    options=[
-                                        {'label': 'SER35', 'value': 'SER35'},
-                                        {'label': 'MET21', 'value': 'MET21'},
-                                        {'label': 'GLU166', 'value': 'GLU166'}
-                                    ],
-                                    value=['SER35'],
-                                    multi=True
+                                    options=self.contact_dropdown_values,
+                                    # value=['SER35'],
+                                    multi=True,
+                                    id="bond_dropdown"
                                 )
                             )
                         )
@@ -307,14 +305,32 @@ class Body:
         return fig1_plot
 
     def __make_fig_network(self):
-        fig_network = dbc.Col(
+        spike_nodes = 0
+        ace2_nodes = 0
+        for i in range(len(self.network.elements)):
+            data = self.network.elements[i]["data"]
+
+            if "parent" in data and data["parent"] == "spike":
+                spike_nodes = spike_nodes + 1
+            elif "parent" in data and data["parent"] == "ace2":
+                ace2_nodes = ace2_nodes + 1
+
+        network_compound_figure = dbc.Col(
             [
-                dbc.Row(dbc.Col(
-                    self.fig_network
-                ))
+                dbc.Row(
+                    dbc.Col(
+                        dbc.Label(f"Spike nodes: {spike_nodes}, hACE2 nodes: {ace2_nodes}", className="network_label")
+                    ), className="network_label"
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        self.network
+                    )
+                )
             ], className="chart"
         )
-        return fig_network
+
+        return network_compound_figure
 
     def __make_distance_plot(self):
         distance_plot = dbc.Col(
@@ -331,35 +347,27 @@ class Body:
 
     def __all_plot_layout(self):
         plot_layout = dbc.Container(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(self.__make_energy_plot(), width=6),
-                        dbc.Col(self.__make_fig1_plot(), width=6)
-                    ],
-                ),
-                dbc.Row(
-                    [
-                        dbc.Col(self.__make_fig_network(), width=8),
-                        dbc.Col(self.__make_distance_plot(), width=4),
-                    ],
-                )
-            ],
+            dbc.Row(
+                [
+                    dbc.Col(self.__make_fig_network(), width=4),
+                    dbc.Col(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(self.__make_energy_plot(), width=6),
+                                    dbc.Col(self.__make_distance_plot(), width=6)
+                                ]
+                            ),
+                            dbc.Row(self.__make_fig1_plot())
+                        ], width=8)
+                ]
+            ),
             fluid=True,
         )
         return plot_layout
 
-    def build_layout(self):
-        main_layout = dbc.Row(
-            [
-                dbc.Col(Body.__make_option_box(), width=3),
-                dbc.Col(self.__all_plot_layout(), width=9)
-            ], no_gutters=True
-        )
-        return main_layout
-
-    def create_energy_plot(self, df_energy) -> go.Figure:
-        replica_name: list = df_energy.Replica.unique()
+    def __create_energy_plot(self, df_energy) -> go.Figure:
+        replica_name = df_energy.Replica.unique()
         num_replicas: int = replica_name.size
 
         fig = px.scatter(df_energy, x="Frame", y="Energy", color="Replica",
@@ -380,8 +388,87 @@ class Body:
         knn_uni = KNeighborsRegressor(10, weights='uniform')
         x = df_energy.Frame.values[0:self.frame_per_simulation]
         for i in range(0, num_replicas):
-            knn_uni.fit(x.reshape(-1, 1), df_energy.Energy[i*self.frame_per_simulation:(self.frame_per_simulation*(i+1))])
+            knn_uni.fit(x.reshape(-1, 1),
+                        df_energy.Energy[i * self.frame_per_simulation:(self.frame_per_simulation * (i + 1))])
             y_uni = knn_uni.predict(x.reshape(-1, 1))
-            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=i, line=dict(color=px.colors.qualitative.D3[i])))
+            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
+                                     line=dict(color=px.colors.qualitative.D3[i])))
 
         return fig
+
+    def __create_distance_plot(self, df_distance):
+        replica_name = df_distance.Replica.unique()
+        num_replicas: int = replica_name.size
+
+        fig = px.scatter(df_distance, x="Frame", y="Distance", color="Replica",
+                         color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
+        fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                         linecolor='black')
+        fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                         linecolor='black',
+                         tickvals=list(range(0, self.frame_per_simulation + 1, 50)))  # nticks=10,
+        fig.update_traces(marker=dict(size=5,
+                                      opacity=0.2,
+                                      # color=px.colors.qualitative.Plotly[0]
+                                      # line=dict(width=2,
+                                      #           color='DarkSlateGrey')
+                                      ),
+                          selector=dict(mode='markers'))
+
+        knn_uni = KNeighborsRegressor(10, weights='uniform')
+        x = df_distance.Frame.values[0:self.frame_per_simulation]
+        for i in range(0, num_replicas):
+            knn_uni.fit(x.reshape(-1, 1),
+                        df_distance.Distance[i * self.frame_per_simulation:(self.frame_per_simulation * (i + 1))])
+            y_uni = knn_uni.predict(x.reshape(-1, 1))
+            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
+                                     line=dict(color=px.colors.qualitative.D3[i])))
+
+        return fig
+
+    def __create_network_plot(self, network_elements: list):
+        size_stylesheet = [
+            # Group selectors
+            {
+                'selector': 'node',
+                'style': {
+                    'content': 'data(label)',
+                    'font-size': '12px',
+                    'width': "10px",
+                    'height': "10px"
+                }
+            },
+            {
+                'selector': 'edge',
+                'style': {
+                    'width': 1
+                }
+            },
+            {
+                'selector': '.small',
+                'style': {
+                    'width': 10,
+                    'height': 10,
+                }
+            },
+            {
+                'selector': '.bind',
+                'style': {'width': 1}
+            },
+            {
+                'selector': '.internal',
+                'style': {
+                    'line-style': 'dashed'
+                }
+            }
+        ]
+        fig = cyto.Cytoscape(
+            id='fig_network',
+            layout={'name': 'preset', 'fit': True},
+            style={'width': '100%', 'height': '500px', 'text-valign': 'center', 'text-halign': 'center'},
+            stylesheet=size_stylesheet,
+            elements=network_elements
+        )
+
+        return fig
+    # endregion
