@@ -27,15 +27,12 @@ def main():
     db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
     df_energy = db_manager.get_energy_values(system="WT", replica=1)
     df_distance = db_manager.get_distance_values(system="WT", replica=1)
-    network_elements = db_manager.get_network_values(system="WT", replica=1)
     df_contacts = db_manager.get_contacts(system="WT", replica=1)
 
-    body = Body(network_elements, df_energy, df, df_distance, df_contacts)
+    body = Body(df_energy, df, df_distance, df_contacts)
     app.layout = dbc.Container(
         [
             html.Div(id='size', style={"display": "none"}),
-            html.Div(id='outputless', style={'display': 'none'}),
-
             dcc.Location(id='url'),
 
             dbc.Row(header_line),

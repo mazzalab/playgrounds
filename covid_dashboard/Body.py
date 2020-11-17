@@ -1,5 +1,6 @@
 from . import app
 
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.neighbors import KNeighborsRegressor
@@ -18,13 +19,16 @@ colors = {
 
 
 class Body:
-    def __init__(self, network_elements: list, df_energy, df, df_distance, df_contacts):
+    def __init__(self, df_energy, df, df_distance, df_contacts):
         self.frame_per_simulation = int(df_energy.Energy.size / df_energy.Replica.unique().size)
 
         self.all_contacts = df_contacts
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts, ["all"])
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
 
-        self.network = self.__create_network_plot(network_elements)
+        self.spike_nodes = set()
+        self.ace2_nodes = set()
+        self.network = self.__create_network_plot(df_contacts, 0, self.frame_per_simulation)
+
         self.scatter_energy = self.__create_energy_plot(df_energy)
         self.scatter_distance = self.__create_distance_plot(df_distance)
 
@@ -42,22 +46,20 @@ class Body:
             [dash.dependencies.Input('url', 'href')]
         )
 
-        app.callback([dash.dependencies.Output('energy_scatter_plot', 'figure'),
-                      dash.dependencies.Output('fig1_plot', 'figure'),
-                      dash.dependencies.Output('fig_network', 'style'),
-                      dash.dependencies.Output('distance_plot', 'figure')],
-                     [dash.dependencies.Input('size', 'children'),
-                      dash.dependencies.Input('simtime-slider', 'value')],
-                     )(self.update_plot)
+        app.callback([
+            dash.dependencies.Output('fig_network', 'style'),
+            dash.dependencies.Output('fig_network', 'layout'),
+            dash.dependencies.Output('energy_scatter_plot', 'figure'),
+            dash.dependencies.Output('fig1_plot', 'figure'),
+            dash.dependencies.Output('distance_plot', 'figure')],
+            [dash.dependencies.Input('size', 'children'),
+             dash.dependencies.Input('simtime-slider', 'value')],
+        )(self.update_plot)
 
         app.callback([dash.dependencies.Output('simtime-slider', 'max'),
                       dash.dependencies.Output('simtime-slider', 'value'),
                       dash.dependencies.Output('simtime-slider', 'marks')],
                      [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
-
-        app.callback(
-            dash.dependencies.Output('bond_dropdown', 'options'),
-            [dash.dependencies.Input('bond_checklist', 'value')])(self.__select_contacts)
 
     def build_layout(self):
         main_layout = dbc.Row(
@@ -84,8 +86,30 @@ class Body:
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
         network_style = {}
+        new_layout = {'name': 'preset', 'fit': True}
         if button_id == "size":
-            network_style = {'height': f'{inner_window_height - 120}px', 'background-color': colors['background']}
+            network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
+            # TODO: redraw here nodes with updated Y coordinates
+            count_ace2_nodes = len(self.ace2_nodes)
+            count_spike_nodes = len(self.spike_nodes)
+            y_pos_ace2 = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_ace2_nodes))
+            y_pos_spike = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_spike_nodes))
+            for i in range(len(self.network.elements)):
+                if 'parent' in self.network.elements[i]["data"]:
+                    if self.network.elements[i]["data"]["parent"] == "spike":
+                        self.network.elements[i]["position"]['y'] = y_pos_spike[count_spike_nodes - 1]
+                        count_spike_nodes = count_spike_nodes - 1
+                    else:
+                        self.network.elements[i]["position"]['y'] = y_pos_ace2[count_ace2_nodes - 1]
+                        count_ace2_nodes = count_ace2_nodes - 1
+            new_layout = {'name': 'preset',
+                          'fit': True,
+                          'positions': {
+                              self.network.elements[3]["data"]['id']: {'position': {'x': 0, 'y': 0}}
+                              # node['data']['id']: node['position']
+                              # for node in nodes
+                          }
+                          }
 
             self.scatter_energy.update_layout(
                 plot_bgcolor=colors['background'],
@@ -137,7 +161,7 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
 
-        return self.scatter_energy, self.fig1, network_style, self.scatter_distance
+        return network_style, new_layout, self.scatter_energy, self.fig1, self.scatter_distance
 
     def set_frame_extreme_positions(self, value):
         return self.frame_per_simulation, [0, self.frame_per_simulation], {i: str(i) for i in
@@ -146,31 +170,22 @@ class Body:
     # endregion
 
     # region PRIVATE METHODS
-    def __format_contact_4_dropdown(self, df_contacts, bond_types: list) -> list:
+    def __format_contact_4_dropdown(self, df_contacts: pd.DataFrame) -> list:
         all_contacts_set = set()
         all_contacts = []
         for index, row in df_contacts.iterrows():
             temp_contact: tuple = row.Contact
-            temp_contact: tuple = tuple(sorted(temp_contact))
 
-            if "all" not in bond_types and row.Contact_type not in bond_types:
+            if temp_contact in all_contacts_set:
                 continue
             else:
-                if (temp_contact[1], temp_contact[0]) in all_contacts_set or temp_contact in all_contacts_set or (
-                        "all" not in bond_types and row.Contact_type not in bond_types):
-                    continue
-                else:
-                    all_contacts_set.add(temp_contact)
-                    temp_dict = dict()
-                    temp_dict['label'] = temp_contact[0] + "-" + temp_contact[1]
-                    temp_dict['value'] = temp_dict['label']
-                    all_contacts.append(temp_dict)
+                all_contacts_set.add(temp_contact)
+                temp_dict = dict()
+                temp_dict['label'] = temp_contact[0] + "-" + temp_contact[1]
+                temp_dict['value'] = temp_dict['label']
+                all_contacts.append(temp_dict)
 
         return all_contacts
-
-    def __select_contacts(self, bonds: list):
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.all_contacts, bonds)
-        return self.contact_dropdown_values
 
     def __make_option_box(self) -> dbc.Col:
         option_box = dbc.Col(
@@ -243,23 +258,10 @@ class Body:
 
                 dbc.Container(
                     [
-                        dbc.FormGroup(
-                            [
-                                dbc.Label("Select contacts", className="option_log_text"),
-                                dbc.Checklist(
-                                    options=[
-                                        {'label': 'hydrogen bond', 'value': 'hb'},
-                                        {'label': 'salt bridge', 'value': 'sb'},
-                                        {'label': 'pi-cation', 'value': 'pc'},
-                                        {'label': 'pi-stacking', 'value': 'ts'},
-                                        {'label': 'van der Waals', 'value': 'vdw'},
-                                        {'label': 'all', 'value': 'all'},
-                                    ],
-                                    value=['all'],
-                                    id="bond_checklist",
-                                    inline=True,
-                                ),
-                            ]
+                        dbc.Row(
+                            dbc.Col(
+                                dbc.Label("Select contacts", className="option_log_text")
+                            )
                         ),
                         dbc.Row(
                             dbc.Col(
@@ -319,7 +321,7 @@ class Body:
             [
                 dbc.Row(
                     dbc.Col(
-                        dbc.Label(f"Spike nodes: {spike_nodes}, hACE2 nodes: {ace2_nodes}", className="network_label")
+                        dbc.Label(f"hACE2 nodes: {ace2_nodes}, Spike nodes: {spike_nodes}", className="network_label")
                     ), className="network_label"
                 ),
                 dbc.Row(
@@ -366,7 +368,7 @@ class Body:
         )
         return plot_layout
 
-    def __create_energy_plot(self, df_energy) -> go.Figure:
+    def __create_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
         replica_name = df_energy.Replica.unique()
         num_replicas: int = replica_name.size
 
@@ -396,7 +398,7 @@ class Body:
 
         return fig
 
-    def __create_distance_plot(self, df_distance):
+    def __create_distance_plot(self, df_distance: pd.DataFrame):
         replica_name = df_distance.Replica.unique()
         num_replicas: int = replica_name.size
 
@@ -426,16 +428,16 @@ class Body:
 
         return fig
 
-    def __create_network_plot(self, network_elements: list):
+    def __create_network_plot(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int):
         size_stylesheet = [
             # Group selectors
             {
                 'selector': 'node',
                 'style': {
                     'content': 'data(label)',
-                    'font-size': '12px',
-                    'width': "10px",
-                    'height': "10px"
+                    'font-size': '10px',
+                    'width': "8px",
+                    'height': "8px"
                 }
             },
             {
@@ -462,12 +464,55 @@ class Body:
                 }
             }
         ]
+
+        elements = [
+            # Parent Nodes
+            {
+                'data': {'id': 'spike', 'label': 'Spike'}
+            },
+            {
+                'data': {'id': 'ace2', 'label': 'hACE2'}
+            },
+        ]
+
+        edges = set()
+        filtered_df_contacts = df_contacts.where(
+            (df_contacts["Frame"] >= start_frame) & (df_contacts["Frame"] <= end_frame))
+        for index, row in filtered_df_contacts.iterrows():
+            contact = row.Contact
+            self.ace2_nodes.add(contact[0] + "_a")
+            self.spike_nodes.add(contact[1] + "_s")
+            edges.add((contact[0] + "_a", contact[1] + "_s"))
+
+        #  add nodes
+        y_pos = range(10, 490, int(480 / len(self.ace2_nodes)))
+        for idx, a in enumerate(self.ace2_nodes):
+            temp_dict = {'data': {'id': a, 'label': a[:-2], 'parent': 'ace2'},
+                         'position': {'x': -60, 'y': y_pos[idx]}
+                         }
+            elements.append(temp_dict)
+
+        y_pos = range(10, 490, int(480 / len(self.spike_nodes)))
+        for idx, s in enumerate(self.spike_nodes):
+            temp_dict = {'data': {'id': s, 'label': s[:-2], 'parent': 'spike'},
+                         'position': {'x': 60, 'y': y_pos[idx]}
+                         }
+            elements.append(temp_dict)
+
+        #  add edges
+        for e in edges:
+            temp_dict = {
+                'data': {'source': e[0], 'target': e[1]},
+                'classes': 'bind'
+            }
+            elements.append(temp_dict)
+
         fig = cyto.Cytoscape(
             id='fig_network',
             layout={'name': 'preset', 'fit': True},
-            style={'width': '100%', 'height': '500px', 'text-valign': 'center', 'text-halign': 'center'},
+            style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
             stylesheet=size_stylesheet,
-            elements=network_elements
+            elements=elements
         )
 
         return fig
