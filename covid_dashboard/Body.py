@@ -48,7 +48,7 @@ class Body:
 
         app.callback([
             dash.dependencies.Output('fig_network', 'style'),
-            dash.dependencies.Output('fig_network', 'layout'),
+            dash.dependencies.Output('fig_network', 'zoom'),
             dash.dependencies.Output('energy_scatter_plot', 'figure'),
             dash.dependencies.Output('fig1_plot', 'figure'),
             dash.dependencies.Output('distance_plot', 'figure')],
@@ -86,42 +86,13 @@ class Body:
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
         network_style = {}
+        zoom_level = 1
         new_layout = {'name': 'preset', 'fit': True}
         if button_id == "size":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
-            # TODO: redraw here nodes with updated Y coordinates
-            count_ace2_nodes = len(self.ace2_nodes)
-            count_spike_nodes = len(self.spike_nodes)
-            y_pos_ace2 = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_ace2_nodes))
-            y_pos_spike = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_spike_nodes))
-            ace2_nodes = []
-            spike_nodes = []
 
-            for i in range(len(self.network.elements)):
-                if 'parent' in self.network.elements[i]["data"]:
-                    if self.network.elements[i]["data"]["parent"] == "spike":
-                        spike_nodes.append((self.network.elements[i]["data"]['id'],
-                                            -40,
-                                            y_pos_spike[count_spike_nodes - 1]))
-                        count_spike_nodes = count_spike_nodes - 1
-                    else:
-                        ace2_nodes.append((self.network.elements[i]["data"]['id'],
-                                           40,
-                                           y_pos_ace2[count_ace2_nodes - 1]))
-                        count_ace2_nodes = count_ace2_nodes - 1
-
-            new_coords = ace2_nodes
-            new_coords.extend(spike_nodes)
-            del count_ace2_nodes, count_spike_nodes, y_pos_ace2, y_pos_spike, ace2_nodes, spike_nodes
-            new_layout = {'name': 'preset',
-                          'fit': True,
-                          'positions': {
-                              # self.network.elements[3]["data"]['id']: {'x': 0, 'y': 0}
-                              # node['data']['id']: node['position']
-                              node[0]: {'x': node[1], 'y': node[2]}
-                              for node in new_coords
-                          }
-                          }
+            # calculate zoom level
+            zoom_level = (inner_window_height - 120)/550  # 550px is the starting canvas height
 
             self.scatter_energy.update_layout(
                 plot_bgcolor=colors['background'],
@@ -173,7 +144,7 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
 
-        return network_style, new_layout, self.scatter_energy, self.fig1, self.scatter_distance
+        return network_style, zoom_level, self.scatter_energy, self.fig1, self.scatter_distance
 
     def set_frame_extreme_positions(self, value):
         return self.frame_per_simulation, [0, self.frame_per_simulation], {i: str(i) for i in
