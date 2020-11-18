@@ -43,7 +43,7 @@ class DBManager:
                 ('ARG212', "GLY10"),
                 ('HIS54', 'SER113'),
                 ('HIS54', 'GLY10'),
-                ('TRP', 'VAL77'),
+                ('TRP88', 'VAL77'),
             ],
             "Contact_type": [
                 "hb",

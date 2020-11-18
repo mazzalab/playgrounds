@@ -1,5 +1,6 @@
 from . import app
 
+import math
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -20,14 +21,14 @@ colors = {
 
 class Body:
     def __init__(self, df_energy, df, df_distance, df_contacts):
-        self.frame_per_simulation = int(df_energy.Energy.size / df_energy.Replica.unique().size)
+        self.tot_frames = df_energy.Energy.size
 
         self.all_contacts = df_contacts
         self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
 
         self.spike_nodes = set()
         self.ace2_nodes = set()
-        self.network = self.__create_network_plot(df_contacts, 0, self.frame_per_simulation)
+        self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
 
         self.scatter_energy = self.__create_energy_plot(df_energy)
         self.scatter_distance = self.__create_distance_plot(df_distance)
@@ -46,6 +47,13 @@ class Body:
             [dash.dependencies.Input('url', 'href')]
         )
 
+        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
+                      dash.dependencies.Output('simtime-slider', 'value'),
+                      dash.dependencies.Output('simtime-slider', 'marks'),
+                      dash.dependencies.Output('select_individual_frame', 'max')
+                      ],
+                     [dash.dependencies.Input('size', 'children')])(self.set_frame_extreme_positions)
+
         app.callback([
             dash.dependencies.Output('fig_network', 'style'),
             dash.dependencies.Output('fig_network', 'zoom'),
@@ -55,11 +63,6 @@ class Body:
             [dash.dependencies.Input('size', 'children'),
              dash.dependencies.Input('simtime-slider', 'value')],
         )(self.update_plot)
-
-        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
-                      dash.dependencies.Output('simtime-slider', 'value'),
-                      dash.dependencies.Output('simtime-slider', 'marks')],
-                     [dash.dependencies.Input('url', 'href')])(self.set_frame_extreme_positions)
 
     def build_layout(self):
         main_layout = dbc.Row(
@@ -71,6 +74,16 @@ class Body:
         return main_layout
 
     # region CALLBACKS
+    def set_frame_extreme_positions(self, inner_window_size: int):
+        ten_ticks_distance = math.floor(self.tot_frames/3)
+
+        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
+        if tick_range[-1] != self.tot_frames - 1:
+            tick_range[-1] = self.tot_frames - 1
+        ticks_dict = {i: str(i) for i in tick_range}
+
+        return self.tot_frames-1, [0, self.tot_frames-1], ticks_dict, self.tot_frames - 1
+
     @staticmethod
     @app.callback(
         dash.dependencies.Output('output-container-simtime-slider', 'children'),
@@ -92,7 +105,7 @@ class Body:
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
 
             # calculate zoom level
-            zoom_level = (inner_window_height - 120)/550  # 550px is the starting canvas height
+            zoom_level = (inner_window_height - 120) / 550  # 550px is the starting canvas height
 
             self.scatter_energy.update_layout(
                 plot_bgcolor=colors['background'],
@@ -146,9 +159,6 @@ class Body:
 
         return network_style, zoom_level, self.scatter_energy, self.fig1, self.scatter_distance
 
-    def set_frame_extreme_positions(self, value):
-        return self.frame_per_simulation, [0, self.frame_per_simulation], {i: str(i) for i in
-                                                                           range(0, self.frame_per_simulation + 1, 300)}
 
     # endregion
 
@@ -178,7 +188,7 @@ class Body:
                         dbc.Row([
                             dbc.Col(
                                 className="option_label",
-                                children=html.Label(children="Select system")
+                                children=html.Label(children="Select system"),
                             ),
                             dbc.Col(
                                 dbc.DropdownMenu(
@@ -189,17 +199,17 @@ class Body:
                                         dbc.DropdownMenuItem("3-mut"),
                                     ],
                                 ),
-                                className="option_component"
+                                className="option_component",
                             )], no_gutters=True
                         ),
                         dbc.Row([
                             dbc.Col(
                                 className="option_label",
-                                children=html.Label(children="Select replica")
+                                children=html.Label(children="Select replica"),
                             ),
                             dbc.Col(
                                 dbc.Input(id="replica_input", placeholder="0-102", type="number", min=0, max=102),
-                                className="option_component"
+                                className="option_component",
                             )], no_gutters=True
                         )
                     ]
@@ -211,29 +221,53 @@ class Body:
 
                 dbc.Container(
                     [
-                        dbc.Row(
-                            dbc.Col(
-                                html.Label("Select frames (1 frame=2ps)")
-                            ), className="option_log_text"
+                        dbc.Tabs(
+                            [
+                                dbc.Tab(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            [
+                                                html.Label("Select frames (1 frame=2ps)"),
+                                                dcc.RangeSlider(
+                                                    id='simtime-slider',
+                                                    min=0,
+                                                    max=10,
+                                                    # step=None,
+                                                    marks={i: str(i) for i in range(0, 10, 1)},
+                                                    value=[0, 10]
+                                                ),
+                                                html.Div(id='output-container-simtime-slider',
+                                                         className="option_log_text")
+                                            ]
+                                        ),
+                                    ),
+                                    label="Aggregate frames"),
+                                dbc.Tab(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            html.Div(
+                                                [
+                                                    html.Label("Select one frame",
+                                                               style={'width': '60%', 'display': 'inline-block'}),
+                                                    dbc.Input(id="select_individual_frame",
+                                                              type="number",
+                                                              min=0,
+                                                              max=10,
+                                                              step=1,
+                                                              style={'width': '40%', 'display': 'inline-block'})
+                                                ]
+                                            ),
+                                        )
+                                    ),
+                                    label="Frame",
+                                    # disabled=True
+                                ),
+                            ]
                         ),
-                        dbc.Row(
-                            dbc.Col(
-                                dcc.RangeSlider(
-                                    id='simtime-slider',
-                                    min=0,
-                                    max=10,
-                                    # step=None,
-                                    marks={i: str(i) for i in range(0, 1301, 300)},
-                                    value=[0, 10]
-                                )
-                            )
-                        ),
-                        dbc.Row(
-                            dbc.Col(
-                                html.Div(id='output-container-simtime-slider')
-                            ), className="option_log_text"
-                        )
-                    ]),
+                    ]
+                ),
+
+                # html.Hr(),
 
                 dbc.Row(
                     html.Hr(className="rounded")
@@ -361,7 +395,7 @@ class Body:
                          linecolor='black')
         fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
                          linecolor='black',
-                         tickvals=list(range(0, self.frame_per_simulation + 1, 50)))  # nticks=10,
+                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
         fig.update_traces(marker=dict(size=5,
                                       opacity=0.2,
                                       # color=px.colors.qualitative.Plotly[0]
@@ -371,10 +405,10 @@ class Body:
                           selector=dict(mode='markers'))
 
         knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_energy.Frame.values[0:self.frame_per_simulation]
+        x = df_energy.Frame.values[0:self.tot_frames]
         for i in range(0, num_replicas):
             knn_uni.fit(x.reshape(-1, 1),
-                        df_energy.Energy[i * self.frame_per_simulation:(self.frame_per_simulation * (i + 1))])
+                        df_energy.Energy[i * self.tot_frames:(self.tot_frames * (i + 1))])
             y_uni = knn_uni.predict(x.reshape(-1, 1))
             fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
                                      line=dict(color=px.colors.qualitative.D3[i])))
@@ -391,7 +425,7 @@ class Body:
                          linecolor='black')
         fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
                          linecolor='black',
-                         tickvals=list(range(0, self.frame_per_simulation + 1, 50)))  # nticks=10,
+                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
         fig.update_traces(marker=dict(size=5,
                                       opacity=0.2,
                                       # color=px.colors.qualitative.Plotly[0]
@@ -401,10 +435,10 @@ class Body:
                           selector=dict(mode='markers'))
 
         knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_distance.Frame.values[0:self.frame_per_simulation]
+        x = df_distance.Frame.values[0:self.tot_frames]
         for i in range(0, num_replicas):
             knn_uni.fit(x.reshape(-1, 1),
-                        df_distance.Distance[i * self.frame_per_simulation:(self.frame_per_simulation * (i + 1))])
+                        df_distance.Distance[i * self.tot_frames:(self.tot_frames * (i + 1))])
             y_uni = knn_uni.predict(x.reshape(-1, 1))
             fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
                                      line=dict(color=px.colors.qualitative.D3[i])))
