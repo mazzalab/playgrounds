@@ -94,20 +94,32 @@ class Body:
             count_spike_nodes = len(self.spike_nodes)
             y_pos_ace2 = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_ace2_nodes))
             y_pos_spike = range(10, inner_window_height - 120, int((inner_window_height - 120) / count_spike_nodes))
+            ace2_nodes = []
+            spike_nodes = []
+
             for i in range(len(self.network.elements)):
                 if 'parent' in self.network.elements[i]["data"]:
                     if self.network.elements[i]["data"]["parent"] == "spike":
-                        self.network.elements[i]["position"]['y'] = y_pos_spike[count_spike_nodes - 1]
+                        spike_nodes.append((self.network.elements[i]["data"]['id'],
+                                            -40,
+                                            y_pos_spike[count_spike_nodes - 1]))
                         count_spike_nodes = count_spike_nodes - 1
                     else:
-                        self.network.elements[i]["position"]['y'] = y_pos_ace2[count_ace2_nodes - 1]
+                        ace2_nodes.append((self.network.elements[i]["data"]['id'],
+                                           40,
+                                           y_pos_ace2[count_ace2_nodes - 1]))
                         count_ace2_nodes = count_ace2_nodes - 1
+
+            new_coords = ace2_nodes
+            new_coords.extend(spike_nodes)
+            del count_ace2_nodes, count_spike_nodes, y_pos_ace2, y_pos_spike, ace2_nodes, spike_nodes
             new_layout = {'name': 'preset',
                           'fit': True,
                           'positions': {
-                              self.network.elements[3]["data"]['id']: {'position': {'x': 0, 'y': 0}}
+                              # self.network.elements[3]["data"]['id']: {'x': 0, 'y': 0}
                               # node['data']['id']: node['position']
-                              # for node in nodes
+                              node[0]: {'x': node[1], 'y': node[2]}
+                              for node in new_coords
                           }
                           }
 
