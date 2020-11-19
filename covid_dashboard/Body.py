@@ -1,4 +1,5 @@
 from . import app
+from .db import DBManager
 
 import math
 import pandas as pd
@@ -20,23 +21,44 @@ colors = {
 
 
 class Body:
-    def __init__(self, df_energy, df, df_distance, df_contacts):
-        self.tot_frames = df_energy.Energy.size
+    def __init__(self):
+        self.db_manager = DBManager()
+        self.tot_frames = 0
 
-        self.all_contacts = df_contacts
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
-
+        df_contacts = pd.DataFrame({
+            "Frame": [],
+            "Contact": [],
+            "Contact_type": [],
+            "Energy": [],
+            "Replica": []
+        })
         self.spike_nodes = set()
         self.ace2_nodes = set()
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
         self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
 
+        df_energy = pd.DataFrame({
+            "Frame": [],
+            "Energy": [],
+            "Replica": []
+        })
         self.scatter_energy = self.__create_energy_plot(df_energy)
+
+        df_distance = pd.DataFrame({
+            "Frame": [],
+            "Distance": [],
+            "Replica": []
+        })
         self.scatter_distance = self.__create_distance_plot(df_distance)
 
+        df = pd.DataFrame({
+            "Fruit": [],
+            "Amount": [],
+            "City": []
+        })
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
-        #  self.fig1 = px.bar(df_distance, x="Replica", y="Distance", color="Replica",
-        #                     animation_frame="Frame", animation_group="Replica", range_y=[0, 30])
 
+        # region Callbacks initialization
         app.clientside_callback(
             """
             function(value){
@@ -46,13 +68,6 @@ class Body:
             dash.dependencies.Output('size', 'children'),
             [dash.dependencies.Input('url', 'href')]
         )
-
-        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
-                      dash.dependencies.Output('simtime-slider', 'value'),
-                      dash.dependencies.Output('simtime-slider', 'marks'),
-                      dash.dependencies.Output('select_individual_frame', 'max')
-                      ],
-                     [dash.dependencies.Input('size', 'children')])(self.set_frame_extreme_positions)
 
         app.callback([
             dash.dependencies.Output('fig_network', 'style'),
@@ -64,10 +79,47 @@ class Body:
              dash.dependencies.Input('simtime-slider', 'value')],
         )(self.update_plot)
 
+        app.callback(dash.dependencies.Output('replica_dropdown', 'children'),
+                     dash.dependencies.Input('system_dropdown', 'n_clicks')
+                     )(self.__on_system_dropdown_select)
+
+        # endregion
+
+    def load_trajectory(self, system: str, replica: int):
+        self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
+        self.df_energy = self.db_manager.get_energy_values(system=system, replica=replica)
+        self.df_distance = self.db_manager.get_distance_values(system=system, replica=replica)
+        self.df_contacts = self.db_manager.get_contacts(system=system, replica=replica)
+
+        self.tot_frames = self.df_energy.Energy.size
+
+        self.all_contacts = self.df_contacts
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
+
+        self.spike_nodes = set()
+        self.ace2_nodes = set()
+        self.network = self.__create_network_plot(self.df_contacts, 0, self.tot_frames)
+
+        self.scatter_energy = self.__create_energy_plot(self.df_energy)
+        self.scatter_distance = self.__create_distance_plot(self.df_distance)
+
+        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+        #  self.fig1 = px.bar(df_distance, x="Replica", y="Distance", color="Replica",
+        #                     animation_frame="Frame", animation_group="Replica", range_y=[0, 30])
+
+        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
+                      dash.dependencies.Output('simtime-slider', 'value'),
+                      dash.dependencies.Output('simtime-slider', 'marks'),
+                      dash.dependencies.Output('select_individual_frame', 'max')
+                      ],
+                     [dash.dependencies.Input('size', 'children')])(self.set_frame_extreme_positions)
+
     def build_layout(self):
+        systems: list = self.db_manager.get_systems()
+
         main_layout = dbc.Row(
             [
-                dbc.Col(self.__make_option_box(), width=2),
+                dbc.Col(self.__make_option_box(systems), width=2),
                 dbc.Col(self.__all_plot_layout(), width=10)
             ], no_gutters=True
         )
@@ -75,14 +127,14 @@ class Body:
 
     # region CALLBACKS
     def set_frame_extreme_positions(self, inner_window_size: int):
-        ten_ticks_distance = math.floor(self.tot_frames/3)
+        ten_ticks_distance = math.floor(self.tot_frames / 3)
 
         tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
         if tick_range[-1] != self.tot_frames - 1:
             tick_range[-1] = self.tot_frames - 1
         ticks_dict = {i: str(i) for i in tick_range}
 
-        return self.tot_frames-1, [0, self.tot_frames-1], ticks_dict, self.tot_frames - 1
+        return self.tot_frames - 1, [0, self.tot_frames - 1], ticks_dict, self.tot_frames - 1
 
     @staticmethod
     @app.callback(
@@ -100,7 +152,6 @@ class Body:
 
         network_style = {}
         zoom_level = 1
-        new_layout = {'name': 'preset', 'fit': True}
         if button_id == "size":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
 
@@ -159,10 +210,12 @@ class Body:
 
         return network_style, zoom_level, self.scatter_energy, self.fig1, self.scatter_distance
 
-
     # endregion
 
     # region PRIVATE METHODS
+    def __on_system_dropdown_select(self, system: str):
+        replica: list = self.db_manager.get_replica(system)
+
     def __format_contact_4_dropdown(self, df_contacts: pd.DataFrame) -> list:
         all_contacts_set = set()
         all_contacts = []
@@ -180,7 +233,7 @@ class Body:
 
         return all_contacts
 
-    def __make_option_box(self) -> dbc.Col:
+    def __make_option_box(self, systems: list) -> dbc.Col:
         option_box = dbc.Col(
             [
                 html.Div(dbc.Container(
@@ -191,13 +244,19 @@ class Body:
                                 children=html.Label(children="Select system"),
                             ),
                             dbc.Col(
+                                dcc.Dropdown(
+                                    id="system_dropdown",
+                                    options=[
+                                        {'label': 'New York City', 'value': 'NYC'},
+                                        {'label': 'Montreal', 'value': 'MTL'},
+                                        {'label': 'San Francisco', 'value': 'SF'}
+                                    ]
+                                ),
+
                                 dbc.DropdownMenu(
+                                    id="system_dropdown",
                                     label="System",
-                                    children=[
-                                        dbc.DropdownMenuItem("WT"),
-                                        dbc.DropdownMenuItem("4-mut"),
-                                        dbc.DropdownMenuItem("3-mut"),
-                                    ],
+                                    children=[dbc.DropdownMenuItem(x) for x in systems],
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -208,7 +267,11 @@ class Body:
                                 children=html.Label(children="Select replica"),
                             ),
                             dbc.Col(
-                                dbc.Input(id="replica_input", placeholder="0-102", type="number", min=0, max=102),
+                                dbc.DropdownMenu(
+                                    id="replica_dropdown",
+                                    label="Replica",
+                                    children=[],
+                                ),
                                 className="option_component",
                             )], no_gutters=True
                         )
@@ -227,34 +290,39 @@ class Body:
                                     dbc.Card(
                                         dbc.CardBody(
                                             [
-                                                html.Label("Select frames (1 frame=2ps)"),
+                                                html.Label("Select frames (1 frame=2ps)",
+                                                           className="option_log_text"),
                                                 dcc.RangeSlider(
                                                     id='simtime-slider',
                                                     min=0,
-                                                    max=10,
+                                                    max=1,
                                                     # step=None,
-                                                    marks={i: str(i) for i in range(0, 10, 1)},
-                                                    value=[0, 10]
+                                                    marks={i: str(i) for i in range(0, 2, 1)},
+                                                    value=[0, 1]
                                                 ),
                                                 html.Div(id='output-container-simtime-slider',
                                                          className="option_log_text")
                                             ]
                                         ),
                                     ),
-                                    label="Aggregate frames"),
+                                    label="Aggregate"),
                                 dbc.Tab(
                                     dbc.Card(
                                         dbc.CardBody(
                                             html.Div(
                                                 [
-                                                    html.Label("Select one frame",
-                                                               style={'width': '60%', 'display': 'inline-block'}),
+                                                    html.Label("Select one frame"),
                                                     dbc.Input(id="select_individual_frame",
                                                               type="number",
                                                               min=0,
-                                                              max=10,
+                                                              max=1,
                                                               step=1,
-                                                              style={'width': '40%', 'display': 'inline-block'})
+                                                              value=0,
+                                                              style={'width': '50%', 'display': 'inline-block'}),
+                                                    dbc.Button("confirm", outline=True, color="primary",
+                                                               style={'width': '43%', 'display': 'inline-block',
+                                                                      'margin-left': "7px"}),
+
                                                 ]
                                             ),
                                         )
@@ -286,7 +354,9 @@ class Body:
                                     options=self.contact_dropdown_values,
                                     # value=['SER35'],
                                     multi=True,
-                                    id="bond_dropdown"
+                                    id="bond_dropdown",
+                                    placeholder="Select a contact",
+                                    style={'font-size': '10px'}
                                 )
                             )
                         )
@@ -391,27 +461,29 @@ class Body:
 
         fig = px.scatter(df_energy, x="Frame", y="Energy", color="Replica",
                          color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
-        fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                         linecolor='black')
-        fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                         linecolor='black',
-                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
-        fig.update_traces(marker=dict(size=5,
-                                      opacity=0.2,
-                                      # color=px.colors.qualitative.Plotly[0]
-                                      # line=dict(width=2,
-                                      #           color='DarkSlateGrey')
-                                      ),
-                          selector=dict(mode='markers'))
 
-        knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_energy.Frame.values[0:self.tot_frames]
-        for i in range(0, num_replicas):
-            knn_uni.fit(x.reshape(-1, 1),
-                        df_energy.Energy[i * self.tot_frames:(self.tot_frames * (i + 1))])
-            y_uni = knn_uni.predict(x.reshape(-1, 1))
-            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
-                                     line=dict(color=px.colors.qualitative.D3[i])))
+        if len(self.spike_nodes) > 0 and len(self.ace2_nodes) > 0:
+            fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                             linecolor='black')
+            fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                             linecolor='black',
+                             tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
+            fig.update_traces(marker=dict(size=5,
+                                          opacity=0.2,
+                                          # color=px.colors.qualitative.Plotly[0]
+                                          # line=dict(width=2,
+                                          #           color='DarkSlateGrey')
+                                          ),
+                              selector=dict(mode='markers'))
+
+            knn_uni = KNeighborsRegressor(10, weights='uniform')
+            x = df_energy.Frame.values[0:self.tot_frames]
+            for i in range(0, num_replicas):
+                knn_uni.fit(x.reshape(-1, 1),
+                            df_energy.Energy[i * self.tot_frames:(self.tot_frames * (i + 1))])
+                y_uni = knn_uni.predict(x.reshape(-1, 1))
+                fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
+                                         line=dict(color=px.colors.qualitative.D3[i])))
 
         return fig
 
@@ -421,31 +493,42 @@ class Body:
 
         fig = px.scatter(df_distance, x="Frame", y="Distance", color="Replica",
                          color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
-        fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                         linecolor='black')
-        fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                         linecolor='black',
-                         tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
-        fig.update_traces(marker=dict(size=5,
-                                      opacity=0.2,
-                                      # color=px.colors.qualitative.Plotly[0]
-                                      # line=dict(width=2,
-                                      #           color='DarkSlateGrey')
-                                      ),
-                          selector=dict(mode='markers'))
 
-        knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_distance.Frame.values[0:self.tot_frames]
-        for i in range(0, num_replicas):
-            knn_uni.fit(x.reshape(-1, 1),
-                        df_distance.Distance[i * self.tot_frames:(self.tot_frames * (i + 1))])
-            y_uni = knn_uni.predict(x.reshape(-1, 1))
-            fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
-                                     line=dict(color=px.colors.qualitative.D3[i])))
+        if len(self.spike_nodes) > 0 and len(self.ace2_nodes) > 0:
+            fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                             linecolor='black')
+            fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                             linecolor='black',
+                             tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
+            fig.update_traces(marker=dict(size=5,
+                                          opacity=0.2,
+                                          # color=px.colors.qualitative.Plotly[0]
+                                          # line=dict(width=2,
+                                          #           color='DarkSlateGrey')
+                                          ),
+                              selector=dict(mode='markers'))
+
+            knn_uni = KNeighborsRegressor(10, weights='uniform')
+            x = df_distance.Frame.values[0:self.tot_frames]
+            for i in range(0, num_replicas):
+                knn_uni.fit(x.reshape(-1, 1),
+                            df_distance.Distance[i * self.tot_frames:(self.tot_frames * (i + 1))])
+                y_uni = knn_uni.predict(x.reshape(-1, 1))
+                fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
+                                         line=dict(color=px.colors.qualitative.D3[i])))
 
         return fig
 
     def __create_network_plot(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int):
+        if len(self.ace2_nodes) == 0 or len(self.spike_nodes) == 0:
+            return cyto.Cytoscape(
+                id='fig_network',
+                layout={'name': 'preset', 'fit': True},
+                style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
+                stylesheet=[],
+                elements=[]
+            )
+
         size_stylesheet = [
             # Group selectors
             {

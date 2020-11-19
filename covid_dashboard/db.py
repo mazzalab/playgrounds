@@ -9,6 +9,17 @@ class DBManager:
     def connect(self, db_uri: str, db_user: str, db_passw: str) -> bool:
         pass
 
+    def get_systems(self):
+        return ["WT", "4-mut", "3-mut"]
+
+    def get_replica(self, system: str):
+        if system == "WT":
+            return list(range(0, 10, 1))
+        if system == "4-mut":
+            return list(range(0, 20, 2))
+        if system == "3-mut":
+            return list(range(0, 50, 1))
+
     def get_energy_values(self, system: str, replica: int) -> pd.DataFrame:
         df_energy = pd.DataFrame({
             "Frame": [str(i) for i in range(0, 10)],
