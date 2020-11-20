@@ -16,13 +16,14 @@
 .option_component{
     margin-top: 10px;
     float: left;
+    height: 2px;
 }
 .option_log_text{
     font-size: 11px;
     #margin-left: 5px;
  }
 .network_label{
-    margin-left: 0px;
+    margin-left: 0;
     margin-top: 5px;
     margin-right: 2px;
     font-size: 10px;

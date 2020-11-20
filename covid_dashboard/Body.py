@@ -23,7 +23,7 @@ colors = {
 class Body:
     def __init__(self):
         self.db_manager = DBManager()
-        self.tot_frames = 0
+        self.tot_frames = 1
 
         df_contacts = pd.DataFrame({
             "Frame": [],
@@ -32,8 +32,6 @@ class Body:
             "Energy": [],
             "Replica": []
         })
-        self.spike_nodes = set()
-        self.ace2_nodes = set()
         self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
         self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
 
@@ -69,50 +67,32 @@ class Body:
             [dash.dependencies.Input('url', 'href')]
         )
 
-        app.callback([
-            dash.dependencies.Output('fig_network', 'style'),
-            dash.dependencies.Output('fig_network', 'zoom'),
-            dash.dependencies.Output('energy_scatter_plot', 'figure'),
-            dash.dependencies.Output('fig1_plot', 'figure'),
-            dash.dependencies.Output('distance_plot', 'figure')],
-            [dash.dependencies.Input('size', 'children'),
-             dash.dependencies.Input('simtime-slider', 'value')],
-        )(self.update_plot)
-
-        app.callback(dash.dependencies.Output('replica_dropdown', 'children'),
-                     dash.dependencies.Input('system_dropdown', 'n_clicks')
+        app.callback(dash.dependencies.Output('replica_dropdown', 'options'),
+                     dash.dependencies.Input('system_dropdown', 'value')
                      )(self.__on_system_dropdown_select)
 
-        # endregion
-
-    def load_trajectory(self, system: str, replica: int):
-        self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
-        self.df_energy = self.db_manager.get_energy_values(system=system, replica=replica)
-        self.df_distance = self.db_manager.get_distance_values(system=system, replica=replica)
-        self.df_contacts = self.db_manager.get_contacts(system=system, replica=replica)
-
-        self.tot_frames = self.df_energy.Energy.size
-
-        self.all_contacts = self.df_contacts
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
-
-        self.spike_nodes = set()
-        self.ace2_nodes = set()
-        self.network = self.__create_network_plot(self.df_contacts, 0, self.tot_frames)
-
-        self.scatter_energy = self.__create_energy_plot(self.df_energy)
-        self.scatter_distance = self.__create_distance_plot(self.df_distance)
-
-        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
-        #  self.fig1 = px.bar(df_distance, x="Replica", y="Distance", color="Replica",
-        #                     animation_frame="Frame", animation_group="Replica", range_y=[0, 30])
+        app.callback(
+            [dash.dependencies.Output('fig_network', 'style'),
+             dash.dependencies.Output('fig_network', 'zoom'),
+             dash.dependencies.Output('network_div', 'children'),
+             dash.dependencies.Output('energy_scatter_plot', 'figure'),
+             dash.dependencies.Output('distance_plot', 'figure'),
+             dash.dependencies.Output('fig1_plot', 'figure')],
+            [dash.dependencies.Input('size', 'children'),
+             dash.dependencies.Input('simtime-slider', 'value'),
+             dash.dependencies.Input('replica_dropdown', 'value'),
+             dash.dependencies.State('system_dropdown', 'value')]
+        )(self.__fill_or_update_plots)
 
         app.callback([dash.dependencies.Output('simtime-slider', 'max'),
                       dash.dependencies.Output('simtime-slider', 'value'),
                       dash.dependencies.Output('simtime-slider', 'marks'),
                       dash.dependencies.Output('select_individual_frame', 'max')
                       ],
-                     [dash.dependencies.Input('size', 'children')])(self.set_frame_extreme_positions)
+                     [dash.dependencies.Input('energy_scatter_plot', 'figure')]
+                     )(self.__set_frame_extreme_positions)
+
+        # endregion
 
     def build_layout(self):
         systems: list = self.db_manager.get_systems()
@@ -126,33 +106,39 @@ class Body:
         return main_layout
 
     # region CALLBACKS
-    def set_frame_extreme_positions(self, inner_window_size: int):
-        ten_ticks_distance = math.floor(self.tot_frames / 3)
-
-        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
-        if tick_range[-1] != self.tot_frames - 1:
-            tick_range[-1] = self.tot_frames - 1
-        ticks_dict = {i: str(i) for i in tick_range}
-
-        return self.tot_frames - 1, [0, self.tot_frames - 1], ticks_dict, self.tot_frames - 1
-
-    @staticmethod
-    @app.callback(
-        dash.dependencies.Output('output-container-simtime-slider', 'children'),
-        [dash.dependencies.Input('simtime-slider', 'value')])
-    def update_frame_selection(value):
-        return f'Selected frames: {value[0]}-{value[1]}'
-
-    def update_plot(self, inner_window_height: int, slider_extreme_values: list):
+    def __fill_or_update_plots(self, inner_window_height: int, slider_extreme_values: list, replica: int, system: str):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
         else:
-            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            prop_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
         network_style = {}
         zoom_level = 1
-        if button_id == "size":
+
+        if prop_id == "replica_dropdown":
+            self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
+            df_energy = self.db_manager.get_energy_values(system=system, replica=replica)
+            df_distance = self.db_manager.get_distance_values(system=system, replica=replica)
+            df_contacts = self.db_manager.get_contacts(system=system, replica=replica)
+
+            self.tot_frames = df_energy.Energy.size
+
+            self.all_contacts = df_contacts
+            self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
+
+            self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
+            self.scatter_energy = self.__create_energy_plot(df_energy)
+            self.scatter_distance = self.__create_distance_plot(df_distance)
+
+            df = pd.DataFrame({
+                "Fruit": [],
+                "Amount": [],
+                "City": []
+            })
+            self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
+
+        if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
 
             # calculate zoom level
@@ -208,13 +194,57 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
 
-        return network_style, zoom_level, self.scatter_energy, self.fig1, self.scatter_distance
+        return network_style, zoom_level, self.network, self.scatter_energy, self.scatter_distance, self.fig1
+
+    def __set_frame_extreme_positions(self, replica: int):
+        ten_ticks_distance = math.floor(self.tot_frames / 3)
+        if ten_ticks_distance == 0:
+            raise dash.exceptions.PreventUpdate
+
+        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
+        if tick_range[-1] != self.tot_frames - 1:
+            tick_range[-1] = self.tot_frames - 1
+        ticks_dict = {i: str(i) for i in tick_range}
+
+        return self.tot_frames - 1, [0, self.tot_frames - 1], ticks_dict, self.tot_frames - 1
+
+    @staticmethod
+    @app.callback(
+        dash.dependencies.Output('output-container-simtime-slider', 'children'),
+        [dash.dependencies.Input('simtime-slider', 'value')])
+    def update_frame_selection(value):
+        return f'Selected frames: {value[0]}-{value[1]}'
+
+    def __on_system_dropdown_select(self, system: str) -> list:
+        if system is None:
+            raise dash.exceptions.PreventUpdate
+
+        replica: list = [{'label': x, 'value': x} for x in self.db_manager.get_replica(system)]
+        return replica
 
     # endregion
 
     # region PRIVATE METHODS
-    def __on_system_dropdown_select(self, system: str):
-        replica: list = self.db_manager.get_replica(system)
+    def __all_plot_layout(self):
+        plot_layout = dbc.Container(
+            dbc.Row(
+                [
+                    dbc.Col(self.__make_fig_network(), width=4),
+                    dbc.Col(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(self.__make_energy_plot(), width=6),
+                                    dbc.Col(self.__make_distance_plot(), width=6)
+                                ]
+                            ),
+                            dbc.Row(self.__make_fig1_plot())
+                        ], width=8)
+                ]
+            ),
+            fluid=True,
+        )
+        return plot_layout
 
     def __format_contact_4_dropdown(self, df_contacts: pd.DataFrame) -> list:
         all_contacts_set = set()
@@ -246,17 +276,7 @@ class Body:
                             dbc.Col(
                                 dcc.Dropdown(
                                     id="system_dropdown",
-                                    options=[
-                                        {'label': 'New York City', 'value': 'NYC'},
-                                        {'label': 'Montreal', 'value': 'MTL'},
-                                        {'label': 'San Francisco', 'value': 'SF'}
-                                    ]
-                                ),
-
-                                dbc.DropdownMenu(
-                                    id="system_dropdown",
-                                    label="System",
-                                    children=[dbc.DropdownMenuItem(x) for x in systems],
+                                    options=[{'label': x, 'value': x} for x in systems]
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -267,10 +287,9 @@ class Body:
                                 children=html.Label(children="Select replica"),
                             ),
                             dbc.Col(
-                                dbc.DropdownMenu(
+                                dcc.Dropdown(
                                     id="replica_dropdown",
-                                    label="Replica",
-                                    children=[],
+                                    options=[],
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -321,7 +340,7 @@ class Body:
                                                               style={'width': '50%', 'display': 'inline-block'}),
                                                     dbc.Button("confirm", outline=True, color="primary",
                                                                style={'width': '43%', 'display': 'inline-block',
-                                                                      'margin-left': "7px"}),
+                                                                      'marginLeft': "7px"}),
 
                                                 ]
                                             ),
@@ -356,7 +375,7 @@ class Body:
                                     multi=True,
                                     id="bond_dropdown",
                                     placeholder="Select a contact",
-                                    style={'font-size': '10px'}
+                                    style={'fontSize': '10px'}
                                 )
                             )
                         )
@@ -413,7 +432,10 @@ class Body:
                 ),
                 dbc.Row(
                     dbc.Col(
-                        self.network
+                        html.Div(
+                            id="network_div",
+                            children=self.network
+                        )
                     )
                 )
             ], className="chart"
@@ -434,27 +456,6 @@ class Body:
         )
         return distance_plot
 
-    def __all_plot_layout(self):
-        plot_layout = dbc.Container(
-            dbc.Row(
-                [
-                    dbc.Col(self.__make_fig_network(), width=4),
-                    dbc.Col(
-                        [
-                            dbc.Row(
-                                [
-                                    dbc.Col(self.__make_energy_plot(), width=6),
-                                    dbc.Col(self.__make_distance_plot(), width=6)
-                                ]
-                            ),
-                            dbc.Row(self.__make_fig1_plot())
-                        ], width=8)
-                ]
-            ),
-            fluid=True,
-        )
-        return plot_layout
-
     def __create_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
         replica_name = df_energy.Replica.unique()
         num_replicas: int = replica_name.size
@@ -462,7 +463,7 @@ class Body:
         fig = px.scatter(df_energy, x="Frame", y="Energy", color="Replica",
                          color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
 
-        if len(self.spike_nodes) > 0 and len(self.ace2_nodes) > 0:
+        if self.tot_frames > 1:
             fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
                              linecolor='black')
             fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
@@ -494,7 +495,7 @@ class Body:
         fig = px.scatter(df_distance, x="Frame", y="Distance", color="Replica",
                          color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
 
-        if len(self.spike_nodes) > 0 and len(self.ace2_nodes) > 0:
+        if self.tot_frames > 1:
             fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
                              linecolor='black')
             fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
@@ -520,7 +521,7 @@ class Body:
         return fig
 
     def __create_network_plot(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int):
-        if len(self.ace2_nodes) == 0 or len(self.spike_nodes) == 0:
+        if self.tot_frames == 1:
             return cyto.Cytoscape(
                 id='fig_network',
                 layout={'name': 'preset', 'fit': True},
@@ -535,7 +536,7 @@ class Body:
                 'selector': 'node',
                 'style': {
                     'content': 'data(label)',
-                    'font-size': '10px',
+                    'fontSize': '10px',
                     'width': "8px",
                     'height': "8px"
                 }
@@ -575,25 +576,27 @@ class Body:
             },
         ]
 
+        ace2_nodes = set()
+        spike_nodes = set()
         edges = set()
         filtered_df_contacts = df_contacts.where(
             (df_contacts["Frame"] >= start_frame) & (df_contacts["Frame"] <= end_frame))
         for index, row in filtered_df_contacts.iterrows():
             contact = row.Contact
-            self.ace2_nodes.add(contact[0] + "_a")
-            self.spike_nodes.add(contact[1] + "_s")
+            ace2_nodes.add(contact[0] + "_a")
+            spike_nodes.add(contact[1] + "_s")
             edges.add((contact[0] + "_a", contact[1] + "_s"))
 
         #  add nodes
-        y_pos = range(10, 490, int(480 / len(self.ace2_nodes)))
-        for idx, a in enumerate(self.ace2_nodes):
+        y_pos = range(10, 490, int(480 / len(ace2_nodes)))
+        for idx, a in enumerate(ace2_nodes):
             temp_dict = {'data': {'id': a, 'label': a[:-2], 'parent': 'ace2'},
                          'position': {'x': -60, 'y': y_pos[idx]}
                          }
             elements.append(temp_dict)
 
-        y_pos = range(10, 490, int(480 / len(self.spike_nodes)))
-        for idx, s in enumerate(self.spike_nodes):
+        y_pos = range(10, 490, int(480 / len(spike_nodes)))
+        for idx, s in enumerate(spike_nodes):
             temp_dict = {'data': {'id': s, 'label': s[:-2], 'parent': 'spike'},
                          'position': {'x': 60, 'y': y_pos[idx]}
                          }
