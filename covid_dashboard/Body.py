@@ -56,7 +56,7 @@ class Body:
         })
         self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
 
-        # region Callbacks initialization
+        # region Callbacks declaration
         app.clientside_callback(
             """
             function(value){
@@ -77,20 +77,16 @@ class Body:
              dash.dependencies.Output('network_div', 'children'),
              dash.dependencies.Output('energy_scatter_plot', 'figure'),
              dash.dependencies.Output('distance_plot', 'figure'),
-             dash.dependencies.Output('fig1_plot', 'figure')],
+             dash.dependencies.Output('fig1_plot', 'figure'),
+             dash.dependencies.Output('range_slider_div', 'children'),
+             dash.dependencies.Output('select_individual_frame', 'max')
+             ],
+
             [dash.dependencies.Input('size', 'children'),
              dash.dependencies.Input('simtime-slider', 'value'),
              dash.dependencies.Input('replica_dropdown', 'value'),
              dash.dependencies.State('system_dropdown', 'value')]
         )(self.__fill_or_update_plots)
-
-        app.callback([dash.dependencies.Output('simtime-slider', 'max'),
-                      dash.dependencies.Output('simtime-slider', 'value'),
-                      dash.dependencies.Output('simtime-slider', 'marks'),
-                      dash.dependencies.Output('select_individual_frame', 'max')
-                      ],
-                     [dash.dependencies.Input('energy_scatter_plot', 'figure')]
-                     )(self.__set_frame_extreme_positions)
 
         # endregion
 
@@ -113,8 +109,17 @@ class Body:
         else:
             prop_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
+        single_frame_max = 1
         network_style = {}
         zoom_level = 1
+        range_slider = dcc.RangeSlider(
+            id='simtime-slider',
+            min=0,
+            max=1,
+            # step=None,
+            marks={0: "0", 1: "1"},
+            value=[0, 1]
+        )
 
         if prop_id == "replica_dropdown":
             self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
@@ -137,6 +142,10 @@ class Body:
                 "City": []
             })
             self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
+
+            # update slider extreme values
+            range_slider = self.__create_range_slider()
+            single_frame_max = range_slider.max
 
         if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
@@ -194,19 +203,8 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
 
-        return network_style, zoom_level, self.network, self.scatter_energy, self.scatter_distance, self.fig1
-
-    def __set_frame_extreme_positions(self, replica: int):
-        ten_ticks_distance = math.floor(self.tot_frames / 3)
-        if ten_ticks_distance == 0:
-            raise dash.exceptions.PreventUpdate
-
-        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
-        if tick_range[-1] != self.tot_frames - 1:
-            tick_range[-1] = self.tot_frames - 1
-        ticks_dict = {i: str(i) for i in tick_range}
-
-        return self.tot_frames - 1, [0, self.tot_frames - 1], ticks_dict, self.tot_frames - 1
+        return network_style, zoom_level, self.network, self.scatter_energy, self.scatter_distance, self.fig1, \
+               range_slider, single_frame_max
 
     @staticmethod
     @app.callback(
@@ -225,6 +223,26 @@ class Body:
     # endregion
 
     # region PRIVATE METHODS
+    def __create_range_slider(self):
+        ten_ticks_distance = math.floor(self.tot_frames / 3)
+        if ten_ticks_distance == 0:
+            raise dash.exceptions.PreventUpdate
+
+        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
+        if tick_range[-1] != self.tot_frames - 1:
+            tick_range[-1] = self.tot_frames - 1
+        ticks_dict = {i: str(i) for i in tick_range}
+
+        new_range_slider = dcc.RangeSlider(
+            id='simtime-slider',
+            min=0,
+            max=self.tot_frames - 1,
+            # step=None,
+            marks=ticks_dict,
+            value=[0, self.tot_frames - 1])
+
+        return new_range_slider
+
     def __all_plot_layout(self):
         plot_layout = dbc.Container(
             dbc.Row(
@@ -311,13 +329,16 @@ class Body:
                                             [
                                                 html.Label("Select frames (1 frame=2ps)",
                                                            className="option_log_text"),
-                                                dcc.RangeSlider(
-                                                    id='simtime-slider',
-                                                    min=0,
-                                                    max=1,
-                                                    # step=None,
-                                                    marks={i: str(i) for i in range(0, 2, 1)},
-                                                    value=[0, 1]
+                                                html.Div(
+                                                    id="range_slider_div",
+                                                    children=dcc.RangeSlider(
+                                                        id='simtime-slider',
+                                                        min=0,
+                                                        max=1,
+                                                        # step=None,
+                                                        marks={i: str(i) for i in range(0, 2, 1)},
+                                                        value=[0, 1]
+                                                    ),
                                                 ),
                                                 html.Div(id='output-container-simtime-slider',
                                                          className="option_log_text")
