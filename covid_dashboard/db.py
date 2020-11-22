@@ -22,9 +22,8 @@ class DBManager:
 
     def get_energy_values(self, system: str, replica: int) -> pd.DataFrame:
         df_energy = pd.DataFrame({
-            "Frame": [str(i) for i in range(0, 10)],
-            "Energy": [i + random.uniform(-50, 50) for i in range(0, 10)],
-            "Replica": (10 * ["first"])
+            "Frame": [str(i) for i in range(0, 6000)],
+            "Energy": [i + random.uniform(-50, 50) for i in range(0, 6000)],
         })
 
         return df_energy
@@ -33,7 +32,6 @@ class DBManager:
         df_distance = pd.DataFrame({
             "Frame": [str(i) for i in range(0, 10)],
             "Distance": sorted([random.uniform(0, 20) for i in range(0, 10)], reverse=True),
-            "Replica": (10 * ["first"])
         })
 
         return df_distance

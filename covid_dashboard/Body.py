@@ -25,6 +25,17 @@ class Body:
         self.db_manager = DBManager()
         self.tot_frames = 1
 
+        self.network = self.__create_empty_network()
+        self.scatter_energy = self.__create_empty_energy_plot()
+        self.scatter_distance = self.__create_empty_distance_plot()
+
+        df = pd.DataFrame({
+            "Fruit": [],
+            "Amount": [],
+            "City": []
+        })
+        self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
+
         df_contacts = pd.DataFrame({
             "Frame": [],
             "Contact": [],
@@ -33,28 +44,6 @@ class Body:
             "Replica": []
         })
         self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
-        self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
-
-        df_energy = pd.DataFrame({
-            "Frame": [],
-            "Energy": [],
-            "Replica": []
-        })
-        self.scatter_energy = self.__create_energy_plot(df_energy)
-
-        df_distance = pd.DataFrame({
-            "Frame": [],
-            "Distance": [],
-            "Replica": []
-        })
-        self.scatter_distance = self.__create_distance_plot(df_distance)
-
-        df = pd.DataFrame({
-            "Fruit": [],
-            "Amount": [],
-            "City": []
-        })
-        self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
 
         # region Callbacks declaration
         app.clientside_callback(
@@ -72,9 +61,7 @@ class Body:
                      )(self.__on_system_dropdown_select)
 
         app.callback(
-            [dash.dependencies.Output('fig_network', 'style'),
-             dash.dependencies.Output('fig_network', 'zoom'),
-             dash.dependencies.Output('network_div', 'children'),
+            [dash.dependencies.Output('network_div', 'children'),
              dash.dependencies.Output('energy_scatter_plot', 'figure'),
              dash.dependencies.Output('distance_plot', 'figure'),
              dash.dependencies.Output('fig1_plot', 'figure'),
@@ -109,17 +96,8 @@ class Body:
         else:
             prop_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-        single_frame_max = 1
-        network_style = {}
-        zoom_level = 1
-        range_slider = dcc.RangeSlider(
-            id='simtime-slider',
-            min=0,
-            max=1,
-            # step=None,
-            marks={0: "0", 1: "1"},
-            value=[0, 1]
-        )
+        single_frame_max = dash.no_update
+        range_slider = dash.no_update
 
         if prop_id == "replica_dropdown":
             self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
@@ -132,9 +110,9 @@ class Body:
             self.all_contacts = df_contacts
             self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
 
-            self.network = self.__create_network_plot(df_contacts, 0, self.tot_frames)
-            self.scatter_energy = self.__create_energy_plot(df_energy)
-            self.scatter_distance = self.__create_distance_plot(df_distance)
+            self.network.elements = self.__update_network_elements(df_contacts, 0, self.tot_frames)
+            self.scatter_energy = self.__update_energy_plot(df_energy)
+            self.scatter_distance = self.__update_distance_plot(df_distance)
 
             df = pd.DataFrame({
                 "Fruit": [],
@@ -149,9 +127,11 @@ class Body:
 
         if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
+            self.network.style = {**self.network.style, **network_style}
 
             # calculate zoom level
             zoom_level = (inner_window_height - 120) / 550  # 550px is the starting canvas height
+            self.network.layout = {**self.network.layout, **{'zoom': zoom_level}}
 
             self.scatter_energy.update_layout(
                 plot_bgcolor=colors['background'],
@@ -203,8 +183,7 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
 
-        return network_style, zoom_level, self.network, self.scatter_energy, self.scatter_distance, self.fig1, \
-               range_slider, single_frame_max
+        return self.network, self.scatter_energy, self.scatter_distance, self.fig1, range_slider, single_frame_max
 
     @staticmethod
     @app.callback(
@@ -477,80 +456,76 @@ class Body:
         )
         return distance_plot
 
-    def __create_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
-        replica_name = df_energy.Replica.unique()
-        num_replicas: int = replica_name.size
 
-        fig = px.scatter(df_energy, x="Frame", y="Energy", color="Replica",
-                         color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
+    def __create_empty_energy_plot(self):
+        df_energy = pd.DataFrame({
+            "Frame": [],
+            "Energy": [],
+        })
+        return px.scatter(df_energy, x="Frame", y="Energy", color_discrete_sequence=px.colors.qualitative.D3[0])
 
-        if self.tot_frames > 1:
-            fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                             linecolor='black')
-            fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                             linecolor='black',
-                             tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
-            fig.update_traces(marker=dict(size=5,
-                                          opacity=0.2,
-                                          # color=px.colors.qualitative.Plotly[0]
-                                          # line=dict(width=2,
-                                          #           color='DarkSlateGrey')
-                                          ),
-                              selector=dict(mode='markers'))
+    def __update_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
+        self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy")
 
-            knn_uni = KNeighborsRegressor(10, weights='uniform')
-            x = df_energy.Frame.values[0:self.tot_frames]
-            for i in range(0, num_replicas):
-                knn_uni.fit(x.reshape(-1, 1),
-                            df_energy.Energy[i * self.tot_frames:(self.tot_frames * (i + 1))])
-                y_uni = knn_uni.predict(x.reshape(-1, 1))
-                fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
-                                         line=dict(color=px.colors.qualitative.D3[i])))
+        self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                                         linecolor='black')
+        self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                                         linecolor='black',
+                                         tickvals=list(range(0, self.tot_frames + 1, int((self.tot_frames + 1)/10))))  # nticks=10,
+        self.scatter_energy.update_traces(marker=dict(size=5,
+                                                      opacity=0.2,
+                                                      # color=px.colors.qualitative.Plotly[0]
+                                                      # line=dict(width=2,
+                                                      #           color='DarkSlateGrey')
+                                                      ),
+                                          selector=dict(mode='markers'))
+        knn_uni = KNeighborsRegressor(10, weights='uniform')
+        x = df_energy.Frame.values[0:self.tot_frames]
+        knn_uni.fit(x.reshape(-1, 1), df_energy.Energy)
+        y_uni = knn_uni.predict(x.reshape(-1, 1))
+        self.scatter_energy.add_trace(go.Scatter(x=x, y=y_uni, mode='lines',
+                                                 name=self.scatter_energy["data"][0]["legendgroup"] + " " + "fit",
+                                                 line=dict(color=px.colors.qualitative.D3[0])))
 
-        return fig
+        return self.scatter_energy
 
-    def __create_distance_plot(self, df_distance: pd.DataFrame):
-        replica_name = df_distance.Replica.unique()
-        num_replicas: int = replica_name.size
+    def __create_empty_distance_plot(self):
+        df_distance = pd.DataFrame({
+            "Frame": [],
+            "Distance": [],
+            "Replica": []
+        })
 
-        fig = px.scatter(df_distance, x="Frame", y="Distance", color="Replica",
-                         color_discrete_sequence=px.colors.qualitative.D3[0:num_replicas])
+        return px.scatter(df_distance, x="Frame", y="Distance", color="Replica")
 
-        if self.tot_frames > 1:
-            fig.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                             linecolor='black')
-            fig.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                             linecolor='black',
-                             tickvals=list(range(0, self.tot_frames + 1, 50)))  # nticks=10,
-            fig.update_traces(marker=dict(size=5,
-                                          opacity=0.2,
-                                          # color=px.colors.qualitative.Plotly[0]
-                                          # line=dict(width=2,
-                                          #           color='DarkSlateGrey')
-                                          ),
-                              selector=dict(mode='markers'))
+    def __update_distance_plot(self, df_distance: pd.DataFrame):
+        self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance")
 
-            knn_uni = KNeighborsRegressor(10, weights='uniform')
-            x = df_distance.Frame.values[0:self.tot_frames]
-            for i in range(0, num_replicas):
-                knn_uni.fit(x.reshape(-1, 1),
-                            df_distance.Distance[i * self.tot_frames:(self.tot_frames * (i + 1))])
-                y_uni = knn_uni.predict(x.reshape(-1, 1))
-                fig.add_trace(go.Scatter(x=x, y=y_uni, mode='lines', name=fig["data"][0]["legendgroup"] + " " + "fit",
-                                         line=dict(color=px.colors.qualitative.D3[i])))
+        self.scatter_distance.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                                           linecolor='black')
+        self.scatter_distance.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                                           linecolor='black',
+                                           tickvals=list(range(0, self.tot_frames + 1, int((self.tot_frames + 1)/10))))  # nticks=10,
+        self.scatter_distance.update_traces(marker=dict(size=5,
+                                                        opacity=0.2,
+                                                        # color=px.colors.qualitative.Plotly[0]
+                                                        # line=dict(width=2,
+                                                        #           color='DarkSlateGrey')
+                                                        ),
+                                            selector=dict(mode='markers'))
 
-        return fig
+        knn_uni = KNeighborsRegressor(10, weights='uniform')
+        x = df_distance.Frame.values[0:self.tot_frames]
+        knn_uni.fit(x.reshape(-1, 1),
+                    df_distance.Distance)
+        y_uni = knn_uni.predict(x.reshape(-1, 1))
+        self.scatter_distance.add_trace(
+            go.Scatter(x=x, y=y_uni, mode='lines', name=self.scatter_distance["data"][0]["legendgroup"] + " " + "fit",
+                       line=dict(color=px.colors.qualitative.D3[0])))
 
-    def __create_network_plot(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int):
-        if self.tot_frames == 1:
-            return cyto.Cytoscape(
-                id='fig_network',
-                layout={'name': 'preset', 'fit': True},
-                style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
-                stylesheet=[],
-                elements=[]
-            )
+        return self.scatter_distance
 
+    def __create_empty_network(self):
         size_stylesheet = [
             # Group selectors
             {
@@ -586,7 +561,17 @@ class Body:
                 }
             }
         ]
+        elements = []
 
+        return cyto.Cytoscape(
+            id='fig_network',
+            layout={'name': 'preset', 'fit': True},
+            style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
+            stylesheet=size_stylesheet,
+            elements=elements
+        )
+
+    def __update_network_elements(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int) -> list:
         elements = [
             # Parent Nodes
             {
@@ -631,13 +616,5 @@ class Body:
             }
             elements.append(temp_dict)
 
-        fig = cyto.Cytoscape(
-            id='fig_network',
-            layout={'name': 'preset', 'fit': True},
-            style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
-            stylesheet=size_stylesheet,
-            elements=elements
-        )
-
-        return fig
+        return elements
     # endregion
