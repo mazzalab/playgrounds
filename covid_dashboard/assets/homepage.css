@@ -21,4 +21,5 @@ body {
 .divBorder {
     border: 1px solid black;
     padding-bottom: 15px;
+    margin-right: 5px;
 }

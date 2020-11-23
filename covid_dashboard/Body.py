@@ -75,6 +75,17 @@ class Body:
              dash.dependencies.State('system_dropdown', 'value')]
         )(self.__fill_or_update_plots)
 
+        app.callback(dash.dependencies.Output('upload-traces', 'children'),
+              dash.dependencies.Input('upload-traces', 'contents'),
+              dash.dependencies.State('upload-traces', 'filename'),
+              dash.dependencies.State('upload-traces', 'last_modified'))(self.__load_trajectorY_file)
+
+        app.callback(
+            [dash.dependencies.Output("trace-progress", "value"),
+             dash.dependencies.Output("trace-progress", "children")],
+            [dash.dependencies.Input("trace-progress-interval", "n_intervals")],
+        )(self.__update_trace_load_progress)
+
         # endregion
 
     def build_layout(self):
@@ -202,6 +213,22 @@ class Body:
     # endregion
 
     # region PRIVATE METHODS
+    def __load_trajectorY_file(self, list_of_contents, list_of_names, list_of_dates):
+        if list_of_contents is not None:
+            pass
+            # children = [
+            #     parse_contents(c, n, d) for c, n, d in
+            #     zip(list_of_contents, list_of_names, list_of_dates)]
+            # return children
+
+    def __update_trace_load_progress(self, n):
+        # https://dash-bootstrap-components.opensource.faculty.ai/docs/components/progress/
+        # check progress of some background process, in this example we'll just
+        # use n_intervals constrained to be in 0-100
+        progress = min(n % 110, 100)
+        # only add text after 5% progress to ensure text isn't squashed too much
+        return progress, f"{progress} %" if progress >= 5 else ""
+
     def __create_range_slider(self):
         ten_ticks_distance = math.floor(self.tot_frames / 3)
         if ten_ticks_distance == 0:
@@ -263,6 +290,42 @@ class Body:
     def __make_option_box(self, systems: list) -> dbc.Col:
         option_box = dbc.Col(
             [
+                dbc.Row(
+                    dbc.Col(
+                        dbc.Label("Load trajectories", className="option_log_text")
+                    )
+                ),
+                html.Div(
+                    [
+                        dcc.Upload(
+                            id='upload-traces',
+                            children=html.Div([
+                                'Drag and Drop or ',
+                                html.A('Select Files', style={'color': 'blue', 'borderBottom': '1px solid blue'})
+                            ]),
+                            style={
+                                'width': 'calc(100% - 5px)',
+                                'boxSizing': 'borderBox',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'marginBottom': '10px',
+                            },
+                            # Disable multiple files to be uploaded
+                            multiple=False
+                        ),
+                        dcc.Interval(id="trace-progress-interval", n_intervals=0, interval=500),
+                        dbc.Progress(id="trace-progress"),
+                    ]
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        dbc.Label("Select trajectory", className="option_log_text")
+                    )
+                ),
                 html.Div(dbc.Container(
                     [
                         dbc.Row([
