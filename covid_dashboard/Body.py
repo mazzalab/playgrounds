@@ -54,9 +54,8 @@ class Body:
         )
 
         app.callback(
-            [dash.dependencies.Output(),
-             dash.dependencies.Output(),
-             dash.dependencies.Output()],
+            #dash.dependencies.Output('badges_div', 'children'),
+            dash.dependencies.Output('url', 'href'),
             dash.dependencies.Input('reset_button', 'n_clicks')
         )(self.__reset_canvas)
 
@@ -64,7 +63,7 @@ class Body:
             dash.dependencies.Output('replica_dropdown', 'options'),
             dash.dependencies.Input('system_dropdown', 'value')
         )(self.__set_replica_dropdown)
-l
+
         app.callback(
             [dash.dependencies.Output('network_div', 'children'),
              dash.dependencies.Output('energy_scatter_plot', 'figure'),
@@ -88,7 +87,6 @@ l
             dash.dependencies.Input('upload-traces', 'contents'),
             dash.dependencies.State('upload-traces', 'filename'),
             dash.dependencies.State('upload-traces', 'last_modified'))(self.__load_trajectories)
-
         # endregion
 
     def build_layout(self):
@@ -100,7 +98,8 @@ l
         )
         return main_layout
 
-    # region CALLBACKS
+        # region CALLBACKS
+
     def __fill_or_update_plots(self, inner_window_height: int, slider_extreme_values: list, replica: int, system: str):
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -205,11 +204,17 @@ l
         return [{'label': x, 'value': x} for x in replica_list]
 
     def __reset_canvas(self, reset_click: int):
-        energy_color = "light"
-        distance_color = "light"
-        contact_color = "light"
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
 
-        self.tot_frames: int = 1
+        new_badges = [
+            dbc.Badge(id="energy_badge", children="Energy", pill=True, color="light"),
+            dbc.Badge(id="distance_badge", children="Distance", pill=True, color="light"),
+            dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light")
+        ]
+
+        self.tot_frames = 1
         self.loaded_plots.clear()
 
         self.df_contacts = self.__create_empty_contact_values()
@@ -225,7 +230,7 @@ l
         })
         self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
 
-        return energy_color, distance_color, contact_color
+        return "localhost:8050"  #new_badges
 
     def __load_trajectories(self, files_content, files_name, files_date):
         ctx = dash.callback_context
@@ -272,9 +277,11 @@ l
                             distance_color = "primary"
                         if 'TOTAL_S_avg' in df:
                             self.df_contacts = df
-                            self.df_contacts["Contact"] = list(zip(df["amm_spike"] + df["uniprot_pos_spike"].astype(str),
-                                                              df["amm_ace2"] + df["uniprot_pos_ace2"].astype(str)))
-                            self.df_contacts = self.df_contacts[['system', 'frame', 'Contact', 'TOTAL_S_avg', 'replica']]
+                            self.df_contacts["Contact"] = list(
+                                zip(df["amm_spike"] + df["uniprot_pos_spike"].astype(str),
+                                    df["amm_ace2"] + df["uniprot_pos_ace2"].astype(str)))
+                            self.df_contacts = self.df_contacts[
+                                ['system', 'frame', 'Contact', 'TOTAL_S_avg', 'replica']]
                             self.df_contacts.columns = ["System", "Frame", "Contact", "Energy", "Replica"]
 
                             self.loaded_plots.append("contact")
@@ -370,12 +377,14 @@ l
                                 'textAlign': 'center',
                                 'marginBottom': '10px',
                             },
-                            # Disable multiple files to be uploaded
+                            # Enable multiple files to be uploaded
                             multiple=True
                         ),
-                        dbc.Badge(id="energy_badge", children="Tot energy", pill=True, color="light"),
-                        dbc.Badge(id="distance_badge", children="Distance", pill=True, color="light"),
-                        dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light"),
+                        html.Div(id="badges_div", children=[
+                            dbc.Badge(id="energy_badge", children="Energy", pill=True, color="light"),
+                            dbc.Badge(id="distance_badge", children="Distance", pill=True, color="light"),
+                            dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light")
+                        ], style={'display': 'inline-block'}),
                         dbc.Button(id="reset_button", children="reset", size="sm", outline=True,
                                    style={"marginLeft": "3px"}),
 
