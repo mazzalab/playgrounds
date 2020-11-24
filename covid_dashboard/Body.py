@@ -54,6 +54,18 @@ class Body:
         )
 
         app.callback(
+            [dash.dependencies.Output(),
+             dash.dependencies.Output(),
+             dash.dependencies.Output()],
+            dash.dependencies.Input('reset_button', 'n_clicks')
+        )(self.__reset_canvas)
+
+        app.callback(
+            dash.dependencies.Output('replica_dropdown', 'options'),
+            dash.dependencies.Input('system_dropdown', 'value')
+        )(self.__set_replica_dropdown)
+l
+        app.callback(
             [dash.dependencies.Output('network_div', 'children'),
              dash.dependencies.Output('energy_scatter_plot', 'figure'),
              dash.dependencies.Output('distance_plot', 'figure'),
@@ -71,8 +83,7 @@ class Body:
             dash.dependencies.Output('energy_badge', "color"),
             dash.dependencies.Output('distance_badge', "color"),
             dash.dependencies.Output('contact_badge', "color"),
-            dash.dependencies.Output('system_dropdown', 'options'),
-            dash.dependencies.Output('replica_dropdown', 'options')
+            dash.dependencies.Output('system_dropdown', 'options')
         ],
             dash.dependencies.Input('upload-traces', 'contents'),
             dash.dependencies.State('upload-traces', 'filename'),
@@ -185,14 +196,37 @@ class Body:
     def update_frame_selection(value):
         return f'Selected frames: {value[0]}-{value[1]}'
 
-    # endregion
+    def __set_replica_dropdown(self, system):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+
+        replica_list: list = self.df_energy[self.df_energy['System'] == system]['Replica'].unique()
+        return [{'label': x, 'value': x} for x in replica_list]
+
     def __reset_canvas(self, reset_click: int):
-        self.loaded_plots.clear()
         energy_color = "light"
         distance_color = "light"
         contact_color = "light"
 
-    # region PRIVATE METHODS
+        self.tot_frames: int = 1
+        self.loaded_plots.clear()
+
+        self.df_contacts = self.__create_empty_contact_values()
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
+        self.network = self.__create_empty_network()
+        self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
+        self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
+
+        self.df = pd.DataFrame({
+            "Fruit": [],
+            "Amount": [],
+            "City": []
+        })
+        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+
+        return energy_color, distance_color, contact_color
+
     def __load_trajectories(self, files_content, files_name, files_date):
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -202,7 +236,6 @@ class Body:
             distance_color = dash.no_update
             contact_color = dash.no_update
             systems = dash.no_update
-            replicas = dash.no_update
 
             for file in zip(files_content, files_name, files_date):
                 content_type, content_string = file[0].split(',')
@@ -219,12 +252,9 @@ class Body:
                                 raise Exception("Loaded files have different numbers of frames")
                             elif systems != dash.no_update and len(systems) != df['system'].nunique():
                                 raise Exception("Loaded files contain different systems")
-                            elif replicas != dash.no_update and len(replicas) != df['replica'].nunique():
-                                raise Exception("Loaded files contain different replicas")
                             else:
                                 self.tot_frames = df.frame.nunique()
                                 systems = df['system'].unique()
-                                replicas = df['replica'].unique()
                         else:
                             raise Exception("Missing critical columns (frame, system, or replica)")
 
@@ -264,16 +294,14 @@ class Body:
 
             if len(self.loaded_plots) == 3:
                 systems_dict = [{'label': x, 'value': x} for x in systems]
-                replicas_dict = [{'label': x, 'value': x} for x in replicas]
             else:
                 systems_dict = dash.no_update
-                replicas_dict = dash.no_update
 
-            return msg, energy_color, distance_color, contact_color, systems_dict, replicas_dict
+            return msg, energy_color, distance_color, contact_color, systems_dict
 
-    def __trigger_trace_load_spinner(self, n):
-        pass
+    # endregion
 
+    # region PRIVATE METHODS
     def __create_range_slider(self):
         ten_ticks_distance = math.floor(self.tot_frames / 3)
         if ten_ticks_distance == 0:
