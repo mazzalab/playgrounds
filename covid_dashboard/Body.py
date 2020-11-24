@@ -1,8 +1,11 @@
 from . import app
 from .db import DBManager
 
+import io
+import base64
 import math
 import pandas as pd
+
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.neighbors import KNeighborsRegressor
@@ -23,27 +26,21 @@ colors = {
 class Body:
     def __init__(self):
         self.db_manager = DBManager()
-        self.tot_frames = 1
+        self.tot_frames: int = 1
+        self.loaded_plots: list = []
 
+        self.df_contacts = self.__create_empty_contact_values()
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
         self.network = self.__create_empty_network()
-        self.scatter_energy = self.__create_empty_energy_plot()
-        self.scatter_distance = self.__create_empty_distance_plot()
+        self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
+        self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
 
-        df = pd.DataFrame({
+        self.df = pd.DataFrame({
             "Fruit": [],
             "Amount": [],
             "City": []
         })
-        self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
-
-        df_contacts = pd.DataFrame({
-            "Frame": [],
-            "Contact": [],
-            "Contact_type": [],
-            "Energy": [],
-            "Replica": []
-        })
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
+        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
 
         # region Callbacks declaration
         app.clientside_callback(
@@ -56,44 +53,37 @@ class Body:
             [dash.dependencies.Input('url', 'href')]
         )
 
-        app.callback(dash.dependencies.Output('replica_dropdown', 'options'),
-                     dash.dependencies.Input('system_dropdown', 'value')
-                     )(self.__on_system_dropdown_select)
-
         app.callback(
             [dash.dependencies.Output('network_div', 'children'),
              dash.dependencies.Output('energy_scatter_plot', 'figure'),
              dash.dependencies.Output('distance_plot', 'figure'),
              dash.dependencies.Output('fig1_plot', 'figure'),
              dash.dependencies.Output('range_slider_div', 'children'),
-             dash.dependencies.Output('select_individual_frame', 'max')
+             dash.dependencies.Output('select_individual_frame', 'max'),
              ],
-
             [dash.dependencies.Input('size', 'children'),
              dash.dependencies.Input('simtime-slider', 'value'),
              dash.dependencies.Input('replica_dropdown', 'value'),
-             dash.dependencies.State('system_dropdown', 'value')]
-        )(self.__fill_or_update_plots)
+             dash.dependencies.State('system_dropdown', 'value')])(self.__fill_or_update_plots)
 
-        app.callback(dash.dependencies.Output('upload-traces', 'children'),
-              dash.dependencies.Input('upload-traces', 'contents'),
-              dash.dependencies.State('upload-traces', 'filename'),
-              dash.dependencies.State('upload-traces', 'last_modified'))(self.__load_trajectorY_file)
-
-        app.callback(
-            [dash.dependencies.Output("trace-progress", "value"),
-             dash.dependencies.Output("trace-progress", "children")],
-            [dash.dependencies.Input("trace-progress-interval", "n_intervals")],
-        )(self.__update_trace_load_progress)
+        app.callback([
+            dash.dependencies.Output('trace-spinner', "children"),
+            dash.dependencies.Output('energy_badge', "color"),
+            dash.dependencies.Output('distance_badge', "color"),
+            dash.dependencies.Output('contact_badge', "color"),
+            dash.dependencies.Output('system_dropdown', 'options'),
+            dash.dependencies.Output('replica_dropdown', 'options')
+        ],
+            dash.dependencies.Input('upload-traces', 'contents'),
+            dash.dependencies.State('upload-traces', 'filename'),
+            dash.dependencies.State('upload-traces', 'last_modified'))(self.__load_trajectories)
 
         # endregion
 
     def build_layout(self):
-        systems: list = self.db_manager.get_systems()
-
         main_layout = dbc.Row(
             [
-                dbc.Col(self.__make_option_box(systems), width=2),
+                dbc.Col(self.__make_option_box(), width=2),
                 dbc.Col(self.__all_plot_layout(), width=10)
             ], no_gutters=True
         )
@@ -107,34 +97,26 @@ class Body:
         else:
             prop_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-        single_frame_max = dash.no_update
         range_slider = dash.no_update
+        single_frame_max = dash.no_update
 
         if prop_id == "replica_dropdown":
-            self.db_manager.connect(db_uri="file:///", db_user="agatta", db_passw="agatta")
-            df_energy = self.db_manager.get_energy_values(system=system, replica=replica)
-            df_distance = self.db_manager.get_distance_values(system=system, replica=replica)
-            df_contacts = self.db_manager.get_contacts(system=system, replica=replica)
-
-            self.tot_frames = df_energy.Energy.size
-
-            self.all_contacts = df_contacts
-            self.contact_dropdown_values = self.__format_contact_4_dropdown(df_contacts)
-
-            self.network.elements = self.__update_network_elements(df_contacts, 0, self.tot_frames)
-            self.scatter_energy = self.__update_energy_plot(df_energy)
-            self.scatter_distance = self.__update_distance_plot(df_distance)
-
-            df = pd.DataFrame({
-                "Fruit": [],
-                "Amount": [],
-                "City": []
-            })
-            self.fig1 = px.bar(df, x="Fruit", y="Amount", color="City", barmode="group")
-
             # update slider extreme values
             range_slider = self.__create_range_slider()
             single_frame_max = range_slider.max
+
+            # update graphical components
+            filtered_df_energy = self.df_energy[(self.df_energy['Replica'] == replica)
+                                                & (self.df_energy['System'] == system)]
+            filtered_df_distance = self.df_distance[(self.df_distance['Replica'] == replica)
+                                                    & (self.df_distance['System'] == system)]
+            filtered_df_contacts = self.df_contacts[(self.df_contacts['Replica'] == replica)
+                                                    & (self.df_contacts['System'] == system)]
+            self.scatter_energy = self.__update_energy_plot(filtered_df_energy)
+            self.scatter_distance = self.__update_distance_plot(filtered_df_distance)
+            self.contact_dropdown_values = self.__format_contact_4_dropdown(filtered_df_contacts)
+            self.network.elements = self.__update_network_elements(filtered_df_contacts, 0, self.tot_frames)
+            self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
 
         if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
@@ -203,31 +185,94 @@ class Body:
     def update_frame_selection(value):
         return f'Selected frames: {value[0]}-{value[1]}'
 
-    def __on_system_dropdown_select(self, system: str) -> list:
-        if system is None:
-            raise dash.exceptions.PreventUpdate
-
-        replica: list = [{'label': x, 'value': x} for x in self.db_manager.get_replica(system)]
-        return replica
-
     # endregion
+    def __reset_canvas(self, reset_click: int):
+        self.loaded_plots.clear()
+        energy_color = "light"
+        distance_color = "light"
+        contact_color = "light"
 
     # region PRIVATE METHODS
-    def __load_trajectorY_file(self, list_of_contents, list_of_names, list_of_dates):
-        if list_of_contents is not None:
-            pass
-            # children = [
-            #     parse_contents(c, n, d) for c, n, d in
-            #     zip(list_of_contents, list_of_names, list_of_dates)]
-            # return children
+    def __load_trajectories(self, files_content, files_name, files_date):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+        else:
+            energy_color = dash.no_update
+            distance_color = dash.no_update
+            contact_color = dash.no_update
+            systems = dash.no_update
+            replicas = dash.no_update
 
-    def __update_trace_load_progress(self, n):
-        # https://dash-bootstrap-components.opensource.faculty.ai/docs/components/progress/
-        # check progress of some background process, in this example we'll just
-        # use n_intervals constrained to be in 0-100
-        progress = min(n % 110, 100)
-        # only add text after 5% progress to ensure text isn't squashed too much
-        return progress, f"{progress} %" if progress >= 5 else ""
+            for file in zip(files_content, files_name, files_date):
+                content_type, content_string = file[0].split(',')
+                decoded = base64.b64decode(content_string)
+
+                try:
+                    if 'txt' in file[1]:
+                        df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+                    elif 'xls' in file[1] or 'xlsx' in file[1]:
+                        df = pd.read_excel(io.BytesIO(decoded))
+
+                        if 'frame' in df and 'system' in df and 'replica' in df:
+                            if 1 < self.tot_frames != df.frame.nunique():
+                                raise Exception("Loaded files have different numbers of frames")
+                            elif systems != dash.no_update and len(systems) != df['system'].nunique():
+                                raise Exception("Loaded files contain different systems")
+                            elif replicas != dash.no_update and len(replicas) != df['replica'].nunique():
+                                raise Exception("Loaded files contain different replicas")
+                            else:
+                                self.tot_frames = df.frame.nunique()
+                                systems = df['system'].unique()
+                                replicas = df['replica'].unique()
+                        else:
+                            raise Exception("Missing critical columns (frame, system, or replica)")
+
+                        if 'Diff_TOTAL_Average' in df:
+                            self.df_energy = df[['system', 'frame', 'Diff_TOTAL_Average', 'replica']]
+                            self.df_energy.columns = ["System", "Frame", "Energy", "Replica"]
+
+                            self.loaded_plots.append("energy")
+                            energy_color = "success"
+                        if 'Distance_Interface' in df:
+                            self.df_distance = df[['system', 'frame', 'Distance_Interface', 'replica']]
+                            self.df_distance.columns = ["System", "Frame", "Distance", "Replica"]
+
+                            self.loaded_plots.append("distance")
+                            distance_color = "primary"
+                        if 'TOTAL_S_avg' in df:
+                            self.df_contacts = df
+                            self.df_contacts["Contact"] = list(zip(df["amm_spike"] + df["uniprot_pos_spike"].astype(str),
+                                                              df["amm_ace2"] + df["uniprot_pos_ace2"].astype(str)))
+                            self.df_contacts = self.df_contacts[['system', 'frame', 'Contact', 'TOTAL_S_avg', 'replica']]
+                            self.df_contacts.columns = ["System", "Frame", "Contact", "Energy", "Replica"]
+
+                            self.loaded_plots.append("contact")
+                            contact_color = "danger"
+
+                            # TODO: to be handled later
+                            self.df = pd.DataFrame({
+                                "Fruit": [],
+                                "Amount": [],
+                                "City": []
+                            })
+                except Exception as e:
+                    print(e)
+
+            msg = f'Missing {3 - len(self.loaded_plots)} plot{"s" if 3 - len(self.loaded_plots) > 1 else ""}' if 3 - len(
+                self.loaded_plots) > 0 else "Data ready to be plotted"
+
+            if len(self.loaded_plots) == 3:
+                systems_dict = [{'label': x, 'value': x} for x in systems]
+                replicas_dict = [{'label': x, 'value': x} for x in replicas]
+            else:
+                systems_dict = dash.no_update
+                replicas_dict = dash.no_update
+
+            return msg, energy_color, distance_color, contact_color, systems_dict, replicas_dict
+
+    def __trigger_trace_load_spinner(self, n):
+        pass
 
     def __create_range_slider(self):
         ten_ticks_distance = math.floor(self.tot_frames / 3)
@@ -253,7 +298,7 @@ class Body:
         plot_layout = dbc.Container(
             dbc.Row(
                 [
-                    dbc.Col(self.__make_fig_network(), width=4),
+                    dbc.Col(self.__make_network_fig(), width=4),
                     dbc.Col(
                         [
                             dbc.Row(
@@ -270,29 +315,12 @@ class Body:
         )
         return plot_layout
 
-    def __format_contact_4_dropdown(self, df_contacts: pd.DataFrame) -> list:
-        all_contacts_set = set()
-        all_contacts = []
-        for index, row in df_contacts.iterrows():
-            temp_contact: tuple = row.Contact
-
-            if temp_contact in all_contacts_set:
-                continue
-            else:
-                all_contacts_set.add(temp_contact)
-                temp_dict = dict()
-                temp_dict['label'] = temp_contact[0] + "-" + temp_contact[1]
-                temp_dict['value'] = temp_dict['label']
-                all_contacts.append(temp_dict)
-
-        return all_contacts
-
-    def __make_option_box(self, systems: list) -> dbc.Col:
+    def __make_option_box(self) -> dbc.Col:
         option_box = dbc.Col(
             [
                 dbc.Row(
                     dbc.Col(
-                        dbc.Label("Load trajectories", className="option_log_text")
+                        dbc.Label("Load trajectories", className="option_section_title")
                     )
                 ),
                 html.Div(
@@ -315,15 +343,23 @@ class Body:
                                 'marginBottom': '10px',
                             },
                             # Disable multiple files to be uploaded
-                            multiple=False
+                            multiple=True
                         ),
-                        dcc.Interval(id="trace-progress-interval", n_intervals=0, interval=500),
-                        dbc.Progress(id="trace-progress"),
+                        dbc.Badge(id="energy_badge", children="Tot energy", pill=True, color="light"),
+                        dbc.Badge(id="distance_badge", children="Distance", pill=True, color="light"),
+                        dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light"),
+                        dbc.Button(id="reset_button", children="reset", size="sm", outline=True,
+                                   style={"marginLeft": "3px"}),
+
+                        dbc.Spinner(html.Div(id="trace-spinner",
+                                             className="option_log_text",
+                                             style={"marginBottom": "10px"})
+                                    ),
                     ]
                 ),
                 dbc.Row(
                     dbc.Col(
-                        dbc.Label("Select trajectory", className="option_log_text")
+                        dbc.Label("Select trajectory", className="option_section_title")
                     )
                 ),
                 html.Div(dbc.Container(
@@ -336,7 +372,6 @@ class Body:
                             dbc.Col(
                                 dcc.Dropdown(
                                     id="system_dropdown",
-                                    options=[{'label': x, 'value': x} for x in systems]
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -475,7 +510,7 @@ class Body:
         )
         return fig1_plot
 
-    def __make_fig_network(self):
+    def __make_network_fig(self):
         spike_nodes = 0
         ace2_nodes = 0
         for i in range(len(self.network.elements)):
@@ -519,13 +554,39 @@ class Body:
         )
         return distance_plot
 
+    def __format_contact_4_dropdown(self, df_contacts: pd.DataFrame) -> list:
+        all_contacts_set = set()
+        all_contacts = []
+        for index, row in df_contacts.iterrows():
+            temp_contact: tuple = row.Contact
+
+            if temp_contact in all_contacts_set:
+                continue
+            else:
+                all_contacts_set.add(temp_contact)
+                temp_dict = dict()
+                temp_dict['label'] = temp_contact[0] + "-" + temp_contact[1]
+                temp_dict['value'] = temp_dict['label']
+                all_contacts.append(temp_dict)
+
+        return all_contacts
+
+    def __create_empty_contact_values(self):
+        return pd.DataFrame({
+            "Frame": [],
+            "Contact": [],
+            "Energy": [],
+            "Replica": []
+        })
 
     def __create_empty_energy_plot(self):
         df_energy = pd.DataFrame({
             "Frame": [],
             "Energy": [],
+            "Replica": []
         })
-        return px.scatter(df_energy, x="Frame", y="Energy", color_discrete_sequence=px.colors.qualitative.D3[0])
+        return px.scatter(df_energy, x="Frame", y="Energy",
+                          color_discrete_sequence=px.colors.qualitative.D3[0]), df_energy
 
     def __update_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
         self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy")
@@ -534,7 +595,8 @@ class Body:
                                          linecolor='black')
         self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
                                          linecolor='black',
-                                         tickvals=list(range(0, self.tot_frames + 1, int((self.tot_frames + 1)/10))))  # nticks=10,
+                                         tickvals=list(range(0, self.tot_frames + 1,
+                                                             int((self.tot_frames + 1) / 10))))  # nticks=10,
         self.scatter_energy.update_traces(marker=dict(size=5,
                                                       opacity=0.2,
                                                       # color=px.colors.qualitative.Plotly[0]
@@ -559,7 +621,7 @@ class Body:
             "Replica": []
         })
 
-        return px.scatter(df_distance, x="Frame", y="Distance", color="Replica")
+        return px.scatter(df_distance, x="Frame", y="Distance", color="Replica"), df_distance
 
     def __update_distance_plot(self, df_distance: pd.DataFrame):
         self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance")
@@ -568,7 +630,8 @@ class Body:
                                            linecolor='black')
         self.scatter_distance.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
                                            linecolor='black',
-                                           tickvals=list(range(0, self.tot_frames + 1, int((self.tot_frames + 1)/10))))  # nticks=10,
+                                           tickvals=list(range(0, self.tot_frames + 1,
+                                                               int((self.tot_frames + 1) / 10))))  # nticks=10,
         self.scatter_distance.update_traces(marker=dict(size=5,
                                                         opacity=0.2,
                                                         # color=px.colors.qualitative.Plotly[0]
@@ -631,8 +694,7 @@ class Body:
             layout={'name': 'preset', 'fit': True},
             style={'width': '100%', 'height': '500px', 'textValign': 'center', 'textHalign': 'center'},
             stylesheet=size_stylesheet,
-            elements=elements
-        )
+            elements=elements)
 
     def __update_network_elements(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int) -> list:
         elements = [

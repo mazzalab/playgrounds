@@ -21,6 +21,10 @@
 .option_log_text{
     font-size: 11px;
  }
+.option_section_title{
+    font-size: 11px;
+    font-weight: bold;
+ }
 .network_label{
     margin-left: 0;
     margin-top: 5px;

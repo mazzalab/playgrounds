@@ -54,21 +54,6 @@ class DBManager:
                 ('HIS54', 'GLY10'),
                 ('TRP88', 'VAL77'),
             ],
-            "Contact_type": [
-                "hb",
-                "sb",
-                "hb",
-                "hb",
-                "sb",
-                "pc",
-                "sb",
-                "hb",
-                "hb",
-                "sb",
-                "pc",
-                "sb",
-                "hb",
-            ],
             "Energy": [random.randint(-8, 10)] * 13,
             "Replica": 13 * ["first"]
         })
