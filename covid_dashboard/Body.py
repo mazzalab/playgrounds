@@ -54,7 +54,8 @@ class Body:
         )
 
         app.callback(
-            #dash.dependencies.Output('badges_div', 'children'),
+            # dash.dependencies.Output('trace_spinner_div', 'children'),
+            # dash.dependencies.Output('badges_div', 'children'),
             dash.dependencies.Output('url', 'href'),
             dash.dependencies.Input('reset_button', 'n_clicks')
         )(self.__reset_canvas)
@@ -214,6 +215,10 @@ class Body:
             dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light")
         ]
 
+        new_spinner = dbc.Spinner(html.Div(id="trace-spinner",
+                                           className="option_log_text",
+                                           style={"marginBottom": "10px"}))
+
         self.tot_frames = 1
         self.loaded_plots.clear()
 
@@ -230,7 +235,7 @@ class Body:
         })
         self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
 
-        return "localhost:8050"  #new_badges
+        return new_spinner, new_badges, "localhost:8050"
 
     def __load_trajectories(self, files_content, files_name, files_date):
         ctx = dash.callback_context
@@ -364,7 +369,8 @@ class Body:
                             id='upload-traces',
                             children=html.Div([
                                 'Drag and Drop or ',
-                                html.A('Select Files', style={'color': 'blue', 'borderBottom': '1px solid blue'})
+                                html.A('Select Files',
+                                       style={'color': 'blue', 'borderBottom': '1px solid blue'})
                             ]),
                             style={
                                 'width': 'calc(100% - 5px)',
@@ -388,10 +394,11 @@ class Body:
                         dbc.Button(id="reset_button", children="reset", size="sm", outline=True,
                                    style={"marginLeft": "3px"}),
 
-                        dbc.Spinner(html.Div(id="trace-spinner",
-                                             className="option_log_text",
-                                             style={"marginBottom": "10px"})
-                                    ),
+                        html.Div(id="trace_spinner_div", children=dbc.Spinner(html.Div(id="trace-spinner",
+                                                                                       className="option_log_text",
+                                                                                       style={"marginBottom": "10px"})
+                                                                              )
+                                 ),
                     ]
                 ),
                 dbc.Row(
