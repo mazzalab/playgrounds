@@ -29,18 +29,28 @@ class Body:
         self.tot_frames: int = 1
         self.loaded_plots: list = []
 
-        self.df_contacts = self.__create_empty_contact_values()
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
-        self.network = self.__create_empty_network()
-        self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
-        self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
+        self.df_contacts: pd.DataFrame = None
+        self.contact_dropdown_values = None
+        self.network = None
+        self.scatter_energy: pd.DataFrame = None
+        self.df_energy = None
+        self.scatter_distance: pd.DataFrame = None
+        self.df_distance = None
+        self.df = None
+        self.fig1 = None
 
-        self.df = pd.DataFrame({
-            "Fruit": [],
-            "Amount": [],
-            "City": []
-        })
-        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+        # self.df_contacts = self.__create_empty_contact_values()
+        # self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
+        # self.network = self.__create_empty_network()
+        # self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
+        # self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
+        #
+        # self.df = pd.DataFrame({
+        #     "Fruit": [],
+        #     "Amount": [],
+        #     "City": []
+        # })
+        # self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
 
         # region Callbacks declaration
         app.clientside_callback(
@@ -54,8 +64,7 @@ class Body:
         )
 
         app.callback(
-            # dash.dependencies.Output('trace_spinner_div', 'children'),
-            # dash.dependencies.Output('badges_div', 'children'),
+            #dash.dependencies.Output('badges_div', 'children'),
             dash.dependencies.Output('url', 'href'),
             dash.dependencies.Input('reset_button', 'n_clicks')
         )(self.__reset_canvas)
@@ -111,7 +120,23 @@ class Body:
         range_slider = dash.no_update
         single_frame_max = dash.no_update
 
-        if prop_id == "replica_dropdown":
+        if prop_id == "size":
+            self.tot_frames = 1
+            self.loaded_plots.clear()
+
+            self.df_contacts = self.__create_empty_contact_values()
+            self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
+            self.network = self.__create_empty_network()
+            self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
+            self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
+
+            self.df = pd.DataFrame({
+                "Fruit": [],
+                "Amount": [],
+                "City": []
+            })
+            self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+        elif prop_id == "replica_dropdown":
             # update slider extreme values
             range_slider = self.__create_range_slider()
             single_frame_max = range_slider.max
@@ -128,6 +153,13 @@ class Body:
             self.contact_dropdown_values = self.__format_contact_4_dropdown(filtered_df_contacts)
             self.network.elements = self.__update_network_elements(filtered_df_contacts, 0, self.tot_frames)
             self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+        else:
+            self.scatter_distance.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
+            self.scatter_energy.update_layout(
+                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
+            )
 
         if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
@@ -179,13 +211,6 @@ class Body:
                 margin=dict(l=20, r=10, t=20, b=20),
                 height=inner_window_height / 2 - 65
             )
-        else:
-            self.scatter_distance.update_layout(
-                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
-            )
-            self.scatter_energy.update_layout(
-                xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
-            )
 
         return self.network, self.scatter_energy, self.scatter_distance, self.fig1, range_slider, single_frame_max
 
@@ -215,27 +240,7 @@ class Body:
             dbc.Badge(id="contact_badge", children="Contacts", pill=True, color="light")
         ]
 
-        new_spinner = dbc.Spinner(html.Div(id="trace-spinner",
-                                           className="option_log_text",
-                                           style={"marginBottom": "10px"}))
-
-        self.tot_frames = 1
-        self.loaded_plots.clear()
-
-        self.df_contacts = self.__create_empty_contact_values()
-        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
-        self.network = self.__create_empty_network()
-        self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
-        self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
-
-        self.df = pd.DataFrame({
-            "Fruit": [],
-            "Amount": [],
-            "City": []
-        })
-        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
-
-        return new_spinner, new_badges, "localhost:8050"
+        return "localhost:8050"  #new_badges
 
     def __load_trajectories(self, files_content, files_name, files_date):
         ctx = dash.callback_context
@@ -369,8 +374,7 @@ class Body:
                             id='upload-traces',
                             children=html.Div([
                                 'Drag and Drop or ',
-                                html.A('Select Files',
-                                       style={'color': 'blue', 'borderBottom': '1px solid blue'})
+                                html.A('Select Files', style={'color': 'blue', 'borderBottom': '1px solid blue'})
                             ]),
                             style={
                                 'width': 'calc(100% - 5px)',
@@ -394,11 +398,10 @@ class Body:
                         dbc.Button(id="reset_button", children="reset", size="sm", outline=True,
                                    style={"marginLeft": "3px"}),
 
-                        html.Div(id="trace_spinner_div", children=dbc.Spinner(html.Div(id="trace-spinner",
-                                                                                       className="option_log_text",
-                                                                                       style={"marginBottom": "10px"})
-                                                                              )
-                                 ),
+                        dbc.Spinner(html.Div(id="trace-spinner",
+                                             className="option_log_text",
+                                             style={"marginBottom": "10px"})
+                                    ),
                     ]
                 ),
                 dbc.Row(
