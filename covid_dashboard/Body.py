@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from sklearn.neighbors import KNeighborsRegressor
 
 import dash
+from dash.dependencies import Input, Output, State
 import dash_cytoscape as cyto
 import dash_bootstrap_components as dbc
 import dash_core_components as dcc
@@ -26,31 +27,7 @@ colors = {
 class Body:
     def __init__(self):
         self.db_manager = DBManager()
-        self.tot_frames: int = 1
-        self.loaded_plots: list = []
-
-        self.df_contacts: pd.DataFrame = None
-        self.contact_dropdown_values = None
-        self.network = None
-        self.scatter_energy: pd.DataFrame = None
-        self.df_energy = None
-        self.scatter_distance: pd.DataFrame = None
-        self.df_distance = None
-        self.df = None
-        self.fig1 = None
-
-        # self.df_contacts = self.__create_empty_contact_values()
-        # self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
-        # self.network = self.__create_empty_network()
-        # self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
-        # self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
-        #
-        # self.df = pd.DataFrame({
-        #     "Fruit": [],
-        #     "Amount": [],
-        #     "City": []
-        # })
-        # self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+        self.__initialize_empty_components()
 
         # region Callbacks declaration
         app.clientside_callback(
@@ -59,44 +36,50 @@ class Body:
                 return window.innerHeight;
             }
             """,
-            dash.dependencies.Output('size', 'children'),
-            [dash.dependencies.Input('url', 'href')]
+            Output('size', 'children'),
+            [Input('url', 'href')]
         )
 
         app.callback(
-            #dash.dependencies.Output('badges_div', 'children'),
-            dash.dependencies.Output('url', 'href'),
-            dash.dependencies.Input('reset_button', 'n_clicks')
-        )(self.__reset_canvas)
+            [
+                Output('trace_spinner_div', 'children'),
+                Output('badges_div', 'children'),
+                Output('url', 'href')
+            ],
+            Input('reset_button', 'n_clicks'))(self.__reset_canvas)
 
         app.callback(
-            dash.dependencies.Output('replica_dropdown', 'options'),
-            dash.dependencies.Input('system_dropdown', 'value')
-        )(self.__set_replica_dropdown)
+            Output('replica_dropdown', 'options'),
+            Input('system_dropdown', 'value'))(self.__set_replica_dropdown)
 
         app.callback(
-            [dash.dependencies.Output('network_div', 'children'),
-             dash.dependencies.Output('energy_scatter_plot', 'figure'),
-             dash.dependencies.Output('distance_plot', 'figure'),
-             dash.dependencies.Output('fig1_plot', 'figure'),
-             dash.dependencies.Output('range_slider_div', 'children'),
-             dash.dependencies.Output('select_individual_frame', 'max'),
-             ],
-            [dash.dependencies.Input('size', 'children'),
-             dash.dependencies.Input('simtime-slider', 'value'),
-             dash.dependencies.Input('replica_dropdown', 'value'),
-             dash.dependencies.State('system_dropdown', 'value')])(self.__fill_or_update_plots)
+            [
+                Output('network_div', 'children'),
+                Output('energy_scatter_plot', 'figure'),
+                Output('distance_plot', 'figure'),
+                Output('fig1_plot', 'figure'),
+                Output('system_dropdown_div', 'children'),
+                Output('replica_dropdown_div', 'children'),
+                Output('range_slider_div', 'children'),
+                Output('select_individual_frame', 'max'),
+            ],
+            [
+                Input('size', 'children'),
+                Input('simtime-slider', 'value'),
+                Input('replica_dropdown', 'value'),
+                State('system_dropdown', 'value')])(self.__fill_or_update_plots)
 
-        app.callback([
-            dash.dependencies.Output('trace-spinner', "children"),
-            dash.dependencies.Output('energy_badge', "color"),
-            dash.dependencies.Output('distance_badge', "color"),
-            dash.dependencies.Output('contact_badge', "color"),
-            dash.dependencies.Output('system_dropdown', 'options')
-        ],
-            dash.dependencies.Input('upload-traces', 'contents'),
-            dash.dependencies.State('upload-traces', 'filename'),
-            dash.dependencies.State('upload-traces', 'last_modified'))(self.__load_trajectories)
+        app.callback(
+            [
+                Output('trace-spinner', "children"),
+                Output('energy_badge', "color"),
+                Output('distance_badge', "color"),
+                Output('contact_badge', "color"),
+                Output('system_dropdown', 'options')
+            ],
+            Input('upload-traces', 'contents'),
+            State('upload-traces', 'filename'),
+            State('upload-traces', 'last_modified'))(self.__load_trajectories)
         # endregion
 
     def build_layout(self):
@@ -119,23 +102,13 @@ class Body:
 
         range_slider = dash.no_update
         single_frame_max = dash.no_update
+        system_dropdown = dash.no_update
+        replica_dropdown = dash.no_update
 
         if prop_id == "size":
-            self.tot_frames = 1
-            self.loaded_plots.clear()
-
-            self.df_contacts = self.__create_empty_contact_values()
-            self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
-            self.network = self.__create_empty_network()
-            self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
-            self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
-
-            self.df = pd.DataFrame({
-                "Fruit": [],
-                "Amount": [],
-                "City": []
-            })
-            self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+            self.__initialize_empty_components()
+            system_dropdown = self.system_dropdown
+            replica_dropdown = self.replica_dropdown
         elif prop_id == "replica_dropdown":
             # update slider extreme values
             range_slider = self.__create_range_slider()
@@ -212,7 +185,7 @@ class Body:
                 height=inner_window_height / 2 - 65
             )
 
-        return self.network, self.scatter_energy, self.scatter_distance, self.fig1, range_slider, single_frame_max
+        return self.network, self.scatter_energy, self.scatter_distance, self.fig1, system_dropdown, replica_dropdown, range_slider, single_frame_max
 
     @staticmethod
     @app.callback(
@@ -223,7 +196,7 @@ class Body:
 
     def __set_replica_dropdown(self, system):
         ctx = dash.callback_context
-        if not ctx.triggered:
+        if not ctx.triggered or not system:
             raise PreventUpdate
 
         replica_list: list = self.df_energy[self.df_energy['System'] == system]['Replica'].unique()
@@ -323,23 +296,42 @@ class Body:
     # endregion
 
     # region PRIVATE METHODS
+    def __initialize_empty_components(self):
+        self.tot_frames = 1
+        self.loaded_plots = []
+
+        self.system_dropdown = dcc.Dropdown(id="system_dropdown", options=[])
+        self.replica_dropdown = dcc.Dropdown(id="replica_dropdown", options=[])
+
+        self.df_contacts = self.__create_empty_contact_values()
+        self.contact_dropdown_values = self.__format_contact_4_dropdown(self.df_contacts)
+        self.network = self.__create_empty_network()
+        self.scatter_energy, self.df_energy = self.__create_empty_energy_plot()
+        self.scatter_distance, self.df_distance = self.__create_empty_distance_plot()
+        self.df = pd.DataFrame({
+            "Fruit": [],
+            "Amount": [],
+            "City": []
+        })
+        self.fig1 = px.bar(self.df, x="Fruit", y="Amount", color="City", barmode="group")
+
     def __create_range_slider(self):
         ten_ticks_distance = math.floor(self.tot_frames / 3)
         if ten_ticks_distance == 0:
             raise dash.exceptions.PreventUpdate
 
-        tick_range = list(range(0, self.tot_frames, ten_ticks_distance))
-        if tick_range[-1] != self.tot_frames - 1:
-            tick_range[-1] = self.tot_frames - 1
+        tick_range = list(range(0, self.tot_frames+1, ten_ticks_distance))
+        if tick_range[-1] != self.tot_frames:
+            tick_range[-1] = self.tot_frames
         ticks_dict = {i: str(i) for i in tick_range}
 
         new_range_slider = dcc.RangeSlider(
             id='simtime-slider',
             min=0,
-            max=self.tot_frames - 1,
+            max=self.tot_frames,
             # step=None,
             marks=ticks_dict,
-            value=[0, self.tot_frames - 1])
+            value=[0, self.tot_frames])
 
         return new_range_slider
 
@@ -422,8 +414,12 @@ class Body:
                                 children=html.Label(children="Select system"),
                             ),
                             dbc.Col(
-                                dcc.Dropdown(
-                                    id="system_dropdown",
+                                html.Div(
+                                    id="system_dropdown_div",
+                                    children=dcc.Dropdown(
+                                        id="system_dropdown",
+                                        options=[]
+                                    )
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -434,9 +430,12 @@ class Body:
                                 children=html.Label(children="Select replica"),
                             ),
                             dbc.Col(
-                                dcc.Dropdown(
-                                    id="replica_dropdown",
-                                    options=[],
+                                html.Div(
+                                    id="replica_dropdown_div",
+                                    children=dcc.Dropdown(
+                                        id="replica_dropdown",
+                                        options=[],
+                                    )
                                 ),
                                 className="option_component",
                             )], no_gutters=True
@@ -641,28 +640,29 @@ class Body:
                           color_discrete_sequence=px.colors.qualitative.D3[0]), df_energy
 
     def __update_energy_plot(self, df_energy: pd.DataFrame) -> go.Figure:
-        self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy")
+        if not df_energy.empty:
+            self.scatter_energy = px.scatter(df_energy, x="Frame", y="Energy")
 
-        self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                                         linecolor='black')
-        self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                                         linecolor='black',
-                                         tickvals=list(range(0, self.tot_frames + 1,
-                                                             int((self.tot_frames + 1) / 10))))  # nticks=10,
-        self.scatter_energy.update_traces(marker=dict(size=5,
-                                                      opacity=0.2,
-                                                      # color=px.colors.qualitative.Plotly[0]
-                                                      # line=dict(width=2,
-                                                      #           color='DarkSlateGrey')
-                                                      ),
-                                          selector=dict(mode='markers'))
-        knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_energy.Frame.values[0:self.tot_frames]
-        knn_uni.fit(x.reshape(-1, 1), df_energy.Energy)
-        y_uni = knn_uni.predict(x.reshape(-1, 1))
-        self.scatter_energy.add_trace(go.Scatter(x=x, y=y_uni, mode='lines',
-                                                 name=self.scatter_energy["data"][0]["legendgroup"] + " " + "fit",
-                                                 line=dict(color=px.colors.qualitative.D3[0])))
+            self.scatter_energy.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                                             linecolor='black')
+            self.scatter_energy.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                                             linecolor='black',
+                                             tickvals=list(range(0, self.tot_frames + 1,
+                                                                 int((self.tot_frames + 1) / 10))))  # nticks=10,
+            self.scatter_energy.update_traces(marker=dict(size=5,
+                                                          opacity=0.2,
+                                                          # color=px.colors.qualitative.Plotly[0]
+                                                          # line=dict(width=2,
+                                                          #           color='DarkSlateGrey')
+                                                          ),
+                                              selector=dict(mode='markers'))
+            knn_uni = KNeighborsRegressor(10, weights='uniform')
+            x = df_energy.Frame.values[0:self.tot_frames]
+            knn_uni.fit(x.reshape(-1, 1), df_energy.Energy)
+            y_uni = knn_uni.predict(x.reshape(-1, 1))
+            self.scatter_energy.add_trace(go.Scatter(x=x, y=y_uni, mode='lines',
+                                                     name=self.scatter_energy["data"][0]["legendgroup"] + " " + "fit",
+                                                     line=dict(color=px.colors.qualitative.D3[0])))
 
         return self.scatter_energy
 
@@ -676,30 +676,31 @@ class Body:
         return px.scatter(df_distance, x="Frame", y="Distance", color="Replica"), df_distance
 
     def __update_distance_plot(self, df_distance: pd.DataFrame):
-        self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance")
+        if not df_distance.empty:
+            self.scatter_distance = px.scatter(df_distance, x="Frame", y="Distance")
 
-        self.scatter_distance.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
-                                           linecolor='black')
-        self.scatter_distance.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
-                                           linecolor='black',
-                                           tickvals=list(range(0, self.tot_frames + 1,
-                                                               int((self.tot_frames + 1) / 10))))  # nticks=10,
-        self.scatter_distance.update_traces(marker=dict(size=5,
-                                                        opacity=0.2,
-                                                        # color=px.colors.qualitative.Plotly[0]
-                                                        # line=dict(width=2,
-                                                        #           color='DarkSlateGrey')
-                                                        ),
-                                            selector=dict(mode='markers'))
+            self.scatter_distance.update_yaxes(nticks=10, gridcolor="lightgray", showline=True, linewidth=2,
+                                               linecolor='black')
+            self.scatter_distance.update_xaxes(showgrid=True, gridcolor="lightgray", showline=True, linewidth=2,
+                                               linecolor='black',
+                                               tickvals=list(range(0, self.tot_frames + 1,
+                                                                   int((self.tot_frames + 1) / 10))))  # nticks=10,
+            self.scatter_distance.update_traces(marker=dict(size=5,
+                                                            opacity=0.2,
+                                                            # color=px.colors.qualitative.Plotly[0]
+                                                            # line=dict(width=2,
+                                                            #           color='DarkSlateGrey')
+                                                            ),
+                                                selector=dict(mode='markers'))
 
-        knn_uni = KNeighborsRegressor(10, weights='uniform')
-        x = df_distance.Frame.values[0:self.tot_frames]
-        knn_uni.fit(x.reshape(-1, 1),
-                    df_distance.Distance)
-        y_uni = knn_uni.predict(x.reshape(-1, 1))
-        self.scatter_distance.add_trace(
-            go.Scatter(x=x, y=y_uni, mode='lines', name=self.scatter_distance["data"][0]["legendgroup"] + " " + "fit",
-                       line=dict(color=px.colors.qualitative.D3[0])))
+            knn_uni = KNeighborsRegressor(10, weights='uniform')
+            x = df_distance.Frame.values[0:self.tot_frames]
+            knn_uni.fit(x.reshape(-1, 1),
+                        df_distance.Distance)
+            y_uni = knn_uni.predict(x.reshape(-1, 1))
+            self.scatter_distance.add_trace(
+                go.Scatter(x=x, y=y_uni, mode='lines', name=self.scatter_distance["data"][0]["legendgroup"] + " " + "fit",
+                           line=dict(color=px.colors.qualitative.D3[0])))
 
         return self.scatter_distance
 
@@ -749,49 +750,52 @@ class Body:
             elements=elements)
 
     def __update_network_elements(self, df_contacts: pd.DataFrame, start_frame: int, end_frame: int) -> list:
-        elements = [
-            # Parent Nodes
-            {
-                'data': {'id': 'spike', 'label': 'Spike'}
-            },
-            {
-                'data': {'id': 'ace2', 'label': 'hACE2'}
-            },
-        ]
+        elements = []
 
-        ace2_nodes = set()
-        spike_nodes = set()
-        edges = set()
-        filtered_df_contacts = df_contacts.where(
-            (df_contacts["Frame"] >= start_frame) & (df_contacts["Frame"] <= end_frame))
-        for index, row in filtered_df_contacts.iterrows():
-            contact = row.Contact
-            ace2_nodes.add(contact[0] + "_a")
-            spike_nodes.add(contact[1] + "_s")
-            edges.add((contact[0] + "_a", contact[1] + "_s"))
+        if not df_contacts.empty:
+            elements = [
+                # Parent Nodes
+                {
+                    'data': {'id': 'spike', 'label': 'Spike'}
+                },
+                {
+                    'data': {'id': 'ace2', 'label': 'hACE2'}
+                },
+            ]
 
-        #  add nodes
-        y_pos = range(10, 490, int(480 / len(ace2_nodes)))
-        for idx, a in enumerate(ace2_nodes):
-            temp_dict = {'data': {'id': a, 'label': a[:-2], 'parent': 'ace2'},
-                         'position': {'x': -60, 'y': y_pos[idx]}
-                         }
-            elements.append(temp_dict)
+            ace2_nodes = set()
+            spike_nodes = set()
+            edges = set()
+            filtered_df_contacts = df_contacts.where(
+                (df_contacts["Frame"] >= start_frame) & (df_contacts["Frame"] <= end_frame))
+            for index, row in filtered_df_contacts.iterrows():
+                contact = row.Contact
+                ace2_nodes.add(contact[0] + "_a")
+                spike_nodes.add(contact[1] + "_s")
+                edges.add((contact[0] + "_a", contact[1] + "_s"))
 
-        y_pos = range(10, 490, int(480 / len(spike_nodes)))
-        for idx, s in enumerate(spike_nodes):
-            temp_dict = {'data': {'id': s, 'label': s[:-2], 'parent': 'spike'},
-                         'position': {'x': 60, 'y': y_pos[idx]}
-                         }
-            elements.append(temp_dict)
+            #  add nodes
+            y_pos = range(10, 490, int(480 / len(ace2_nodes)))
+            for idx, a in enumerate(ace2_nodes):
+                temp_dict = {'data': {'id': a, 'label': a[:-2], 'parent': 'ace2'},
+                             'position': {'x': -60, 'y': y_pos[idx]}
+                             }
+                elements.append(temp_dict)
 
-        #  add edges
-        for e in edges:
-            temp_dict = {
-                'data': {'source': e[0], 'target': e[1]},
-                'classes': 'bind'
-            }
-            elements.append(temp_dict)
+            y_pos = range(10, 490, int(480 / len(spike_nodes)))
+            for idx, s in enumerate(spike_nodes):
+                temp_dict = {'data': {'id': s, 'label': s[:-2], 'parent': 'spike'},
+                             'position': {'x': 60, 'y': y_pos[idx]}
+                             }
+                elements.append(temp_dict)
+
+            #  add edges
+            for e in edges:
+                temp_dict = {
+                    'data': {'source': e[0], 'target': e[1]},
+                    'classes': 'bind'
+                }
+                elements.append(temp_dict)
 
         return elements
     # endregion
