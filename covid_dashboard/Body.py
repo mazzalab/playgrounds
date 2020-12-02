@@ -108,6 +108,7 @@ class Body:
         frame_slider = dash.no_update
         system_dropdown = dash.no_update
         replica_dropdown = dash.no_update
+        y_empty_vector = [None] * self.tot_frames
 
         if prop_id == "size":
             self.__initialize_empty_components()
@@ -144,11 +145,17 @@ class Body:
             )
         else:
             # frame_slider here
-            self.scatter_energy["data"][2]["y"] = [float(self.df_energy[
-                                                            (self.df_energy["Frame"] == frame_slider_value) &
-                                                            (self.df_energy["System"] == system) &
-                                                            (self.df_energy["Replica"] == replica)
-                                                            ].Energy)]
+            y_vector = y_empty_vector
+            y_vector[frame_slider_value] = self.scatter_energy["data"][1]["y"][frame_slider_value]
+            self.scatter_energy["data"][2]["y"] = y_vector
+
+            y_vector = y_empty_vector
+            y_vector[frame_slider_value] = self.scatter_distance["data"][1]["y"][frame_slider_value]
+            self.scatter_distance["data"][2]["y"] = y_vector
+
+            self.network.elements = self.__update_network_elements(
+                self.df_contacts, frame_slider_value, frame_slider_value, system, replica
+            )
 
         if prop_id == "size" or prop_id == "replica_dropdown":
             network_style = {'height': f'{inner_window_height - 120}px', 'backgroundColor': colors['background']}
@@ -263,13 +270,10 @@ class Body:
                         df = pd.read_excel(io.BytesIO(decoded))
 
                         if 'frame' in df and 'system' in df and 'replica' in df:
-                            if 1 < self.tot_frames != df.frame.nunique():
-                                raise Exception("Loaded files have different numbers of frames")
-                            elif systems != dash.no_update and len(systems) != df['system'].nunique():
-                                raise Exception("Loaded files contain different systems")
-                            else:
-                                self.tot_frames = df.frame.nunique()
-                                systems = df['system'].unique()
+                            # TODO: check that the loaded files contain same number of frames, same systems and replicas
+
+                            self.tot_frames = df.frame.max()
+                            systems = df['system'].unique()
                         else:
                             raise Exception("Missing critical columns (frame, system, or replica)")
 
@@ -709,7 +713,7 @@ class Body:
                                                           ),
                                               selector=dict(mode='markers'))
             knn_uni = KNeighborsRegressor(10, weights='uniform')
-            x = df_energy.Frame.values[0:self.tot_frames]
+            x = df_energy.Frame.values[0:self.tot_frames+1]
             knn_uni.fit(x.reshape(-1, 1), df_energy.Energy)
             y_uni = knn_uni.predict(x.reshape(-1, 1))
             self.scatter_energy.add_trace(go.Scatter(x=x, y=y_uni, mode='lines',
@@ -717,7 +721,8 @@ class Body:
                                                      line=dict(color=px.colors.qualitative.D3[0])))
 
             self.scatter_energy.add_trace(go.Scatter(x=x, y=[y_uni[0]], mode="markers",
-                                                     marker=dict(color="red", size=10), name="cursor")
+                                                     marker=dict(color="red", size=10), name="cursor",
+                                                     showlegend=False)
                                           )
 
         return self.scatter_energy
@@ -726,7 +731,8 @@ class Body:
         df_distance = pd.DataFrame({
             "Frame": [],
             "Distance": [],
-            "Replica": []
+            "Replica": [],
+            "System": []
         })
 
         return px.scatter(df_distance, x="Frame", y="Distance", color="Replica"), df_distance
@@ -750,14 +756,18 @@ class Body:
                                                 selector=dict(mode='markers'))
 
             knn_uni = KNeighborsRegressor(10, weights='uniform')
-            x = df_distance.Frame.values[0:self.tot_frames]
-            knn_uni.fit(x.reshape(-1, 1),
-                        df_distance.Distance)
+            x = df_distance.Frame.values[0:self.tot_frames+1]
+            knn_uni.fit(x.reshape(-1, 1), df_distance.Distance)
             y_uni = knn_uni.predict(x.reshape(-1, 1))
             self.scatter_distance.add_trace(
                 go.Scatter(x=x, y=y_uni, mode='lines',
                            name=self.scatter_distance["data"][0]["legendgroup"] + " " + "fit",
                            line=dict(color=px.colors.qualitative.D3[0])))
+
+            self.scatter_distance.add_trace(go.Scatter(x=x, y=[y_uni[0]], mode="markers",
+                                                       marker=dict(color="red", size=10),
+                                                       showlegend=False)
+                                            )
 
         return self.scatter_distance
 
