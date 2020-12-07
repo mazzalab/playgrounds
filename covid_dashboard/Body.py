@@ -117,7 +117,6 @@ class Body:
         frame_slider = dash.no_update
         system_dropdown = dash.no_update
         replica_dropdown = dash.no_update
-        y_empty_vector = [None] * self.tot_frames
 
         if prop_id == "size":
             self.__initialize_empty_components()
@@ -157,20 +156,20 @@ class Body:
                 xaxis=dict(range=[slider_extreme_values[0], slider_extreme_values[1]])
             )
             self.network.elements = self.__update_network_elements(
-                self.df_contacts, slider_extreme_values[0], slider_extreme_values[1], system, replica
+                self.df_contacts_filter, slider_extreme_values[0], slider_extreme_values[1], system, replica
             )
         else:
             # frame_slider's event here
-            y_vector = y_empty_vector
-            y_vector[frame_slider_value] = self.scatter_energy["data"][1]["y"][frame_slider_value]
-            self.scatter_energy["data"][2]["y"] = y_vector
+            self.scatter_energy = self.__update_scatter_dot_position(
+                self.scatter_energy, frame_slider_value
+            )
 
-            y_vector = y_empty_vector
-            y_vector[frame_slider_value] = self.scatter_distance["data"][1]["y"][frame_slider_value]
-            self.scatter_distance["data"][2]["y"] = y_vector
+            self.scatter_distance = self.__update_scatter_dot_position(
+                self.scatter_distance, frame_slider_value
+            )
 
             self.network.elements = self.__update_network_elements(
-                self.df_contacts, frame_slider_value, frame_slider_value, system, replica
+                self.df_contacts_filter, frame_slider_value, frame_slider_value, system, replica
             )
 
         if prop_id == "size" or prop_id == "replica_dropdown":
@@ -851,7 +850,7 @@ class Body:
                                   system: str, replica: str) -> list:
         elements = []
 
-        if not df_contacts.empty:
+        if not df_contacts.empty and (set(df_contacts.Frame) & set(range(start_frame, end_frame+1))):
             elements = [
                 # Parent Nodes
                 {
@@ -909,4 +908,17 @@ class Body:
                 elements.append(temp_dict)
 
         return elements
+
+    def __update_scatter_dot_position(self, scatter_plot, frame_slider_value: int):
+        y_empty_vector = [None] * self.tot_frames
+        y_vector = y_empty_vector
+        act_x = scatter_plot["data"][1]["x"]
+        if frame_slider_value in act_x:
+            selected_frame = frame_slider_value
+        else:
+            selected_frame = min(act_x, key=lambda x: abs(x - frame_slider_value))
+        y_vector[frame_slider_value] = scatter_plot["data"][1]["y"][selected_frame]
+        scatter_plot["data"][2]["y"] = y_vector
+
+        return scatter_plot
     # endregion
