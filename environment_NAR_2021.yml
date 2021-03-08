@@ -9,6 +9,7 @@ dependencies:
   - pandas
   - matplotlib
   - scikit-learn
+  - pyntacle=1.3.2
   - traitlets
   - ipython
   - ipywidgets  
