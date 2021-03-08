@@ -20,9 +20,4 @@ dependencies:
   - autopep8
   - xlrd
   - openpyxl
-  - dash-bootstrap-components
-  - dash
-  - scikit-learn
-  - dash_cytoscape
-prefix: F:\Programs\miniconda3\envs\playgrounds
 

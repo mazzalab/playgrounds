@@ -5,24 +5,18 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - ipython
-  - pandas
-  - traitlets
-  - matplotlib
   - numpy
-  - python=3.7
-  - ipywidgets
+  - pandas
+  - matplotlib
   - scikit-learn
+  - traitlets
+  - ipython
+  - ipywidgets  
+  - openpyxl
+  - python=3.7
   - notebook
   - jupiter
   - jupyter_contrib_nbextensions
   - watermark
   - autopep8
-  - xlrd
-  - openpyxl
-  - dash-bootstrap-components
-  - dash
-  - scikit-learn
-  - dash_cytoscape
-prefix: F:\Programs\miniconda3\envs\playgrounds
 
