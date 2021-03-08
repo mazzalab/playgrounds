@@ -14,9 +14,9 @@ cd playgrounds
 ```
 **Create a new Miniconda environment and activate it**
 
-Open a Miniconda command prompt, navigate to the *playgrounds* folder where the project was cloned and type
+Open a Miniconda command prompt, navigate to the *playgrounds* folder where the project was cloned into and create the proper environment (e.g. environment_NAR_2021.yml), 
 ```
-conda env create -f environment.yml
+conda env create -f environment_<<project>>.<<year>>.yml
 conda activate playgrounds
 ```
 **Open the notebook in the default browser**
@@ -33,3 +33,7 @@ The easiest way to work with these notebooks is that of using third-party servic
 ## HD Prevalence estimate 2014-2050
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mazzalab/playgrounds/master?filepath=HD_prevalence_JNNP_2020.ipynb) 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/HD_prevalence_JNNP_2020.ipynb)
+
+## Gene co-expressed networks (macroH2A1.1 and DDR)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mazzalab/playgrounds/master?filepath=macroH2A_IPS_NAR_2021.ipynb) 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/macroH2A_IPS_NAR_2021.ipynb)

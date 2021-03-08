@@ -10,6 +10,7 @@ dependencies:
   - traitlets
   - matplotlib
   - numpy
+  - scipy
   - python=3.7
   - ipywidgets
   - scikit-learn
@@ -23,5 +24,3 @@ dependencies:
   - dash
   - scikit-learn
   - dash_cytoscape
-prefix: F:\Programs\miniconda3\envs\playgrounds
-
