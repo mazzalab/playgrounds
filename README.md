@@ -30,10 +30,11 @@ The easiest way to work with these notebooks is that of using third-party servic
 [Binder](https://mybinder.org/) and [Colab](https://colab.research.google.com/) links follow for each available notebook in this repository.
 
 
+
 ## HD Prevalence estimate 2014-2050
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mazzalab/playgrounds/master?filepath=HD_prevalence_JNNP_2020.ipynb) 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/HD_prevalence_JNNP_2020.ipynb)
 
-## Gene co-expressed networks (macroH2A1.1 and DDR)
+## Gene co-expression networks (macroH2A1.1 and DDR)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mazzalab/playgrounds/master?filepath=macroH2A_IPS_NAR_2021.ipynb) 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/macroH2A_IPS_NAR_2021.ipynb)
