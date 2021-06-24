@@ -1,0 +1,13 @@
+name: playgrounds
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ipython=7.24.1
+  - pandas=1.2.5
+  - matplotlib=3.4.2
+  - python=3.9
+  - watermark=2.2.0
+  - jupyterlab=3.0.16
+  - igraph=0.9.1
+
