@@ -38,3 +38,6 @@ The easiest way to work with these notebooks is that of using third-party servic
 ## Gene co-expression networks (macroH2A1.1 and DDR)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mazzalab/playgrounds/master?filepath=macroH2A_IPS_StemCells_2021.ipynb) 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/macroH2A_IPS_StemCells_2021.ipynb)
+
+## Accumulated flow to tank nodes
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/accumulated_flow.ipynb)
