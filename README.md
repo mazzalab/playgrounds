@@ -46,5 +46,4 @@ The easiest way to work with these notebooks is that of using third-party servic
 Here, we present the benefits of a topology-aware versus an age-based vaccination strategy to mitigate the spreading of the virus.
 We provide a Jupyter notebook, that can be easily tested in GoogleColab. It carries simulations with a fixed recovery rate of 14 days, with the possibility to modify both newtork topology and simulation parameters.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)]
-(https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/Non_markov_SIR_covid.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/Non_markov_SIR_covid.ipynb)
