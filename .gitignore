@@ -1,3 +1,8 @@
+# Custom ignore statements
+data/APOGEE2_2022/test/
+data/APOGEE2_2022/extracted_data/
+.idea/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

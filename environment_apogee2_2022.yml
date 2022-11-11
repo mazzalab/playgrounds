@@ -1,0 +1,17 @@
+name: playgrounds
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pandas
+  - numpy
+  - matplotlib
+  - scipy
+  - scikit-learn=1.0
+  - imbalanced-learn
+  
+  # dev packages
+  - notebook
+  - jupyter_contrib_nbextensions
+  - watermark
+  - autopep8
