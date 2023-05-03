@@ -64,3 +64,8 @@ We provide a Jupyter notebook, that can be easily tested in GoogleColab. It carr
 A notebook to reproduce the whole APOGEE 2 learning protocol. It performs a two-stages analysis including the feature selection, MitImpact variants annotation, a nested cross-validation procedure, and performance measurement and comparison with other meta-predictors.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/apogee2_NMeth_2022.ipynb)
+
+## HD Composite Cognition Score 
+A notebook to calculate the Composite Cognition Score (CCS) starting from the following four UHDRS neuropsychological tests: Symbol Digit Modality Test (SDMT), Categorical Verbal Fluency Test (VFT), Stroop Color Reading Test (SCR), and Stroop Word Reading (SWR).
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mazzalab/playgrounds/blob/master/CCS.ipynb)
